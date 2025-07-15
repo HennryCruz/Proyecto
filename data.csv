@@ -1,4 +1,5 @@
 ID,Producto,Cantidad,Usuario,Edificio,Localizacion
-1,Helio,1,Pedri Ramirez Cruz,Edificio Q,Q01
-2,Argon,1,Victor Manuel Serrano Caballero,Edificio Q,Q02
-3,Acetileno,1,Saul Adrian Gallardo Heredia,Edificio C,Lab C002
+1,Mezcla Epa,1,Francisco Rangel Murillo,Edificio Q,Q01
+2,Acetileno,1,Victor Manuel Serrano Caballero,Edificio Q,Q02
+3,Mezcla Epa,1,Saul Adrian Gallardo Heredia,Edificio C,Lab C002
+4,Hidrogeno,1,Hennry Rene de Jesus Cruz Gomez,Edificio M,Interior
