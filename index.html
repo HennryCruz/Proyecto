@@ -2,15 +2,15 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Listado de Productos</title>
+  <title>Cilindros CENAM</title>
   <link rel="stylesheet" href="style.css">
+
+  <!-- Librería moderna de QR -->
+  <script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.5.0/lib/qr-code-styling.js"></script>
 </head>
 <body>
-  <!-- Librería para generar QR -->
-<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-<script src="script.js"></script>
-
   <h1>Listado de Productos</h1>
+
   <table id="tabla">
     <thead>
       <tr>
@@ -20,11 +20,17 @@
         <th>Usuario</th>
         <th>Edificio</th>
         <th>Localización</th>
+        <th>No° Serie</th>
+        <th>Fecha de Entrada</th>
+        <th>Contrato</th>
         <th>Ver QR</th>
       </tr>
     </thead>
     <tbody></tbody>
   </table>
+
+  <!-- Contenedor para el QR -->
+  <div id="qr-container" style="margin-top: 30px;"></div>
 
   <script src="script.js"></script>
 </body>

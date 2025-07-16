@@ -5,7 +5,6 @@ async function cargarCSV() {
   const headers = filas[0].split(',');
   const cuerpo = document.querySelector('#tabla tbody');
 
-  // Limpia la tabla antes de agregar filas nuevas
   cuerpo.innerHTML = '';
 
   filas.slice(1).forEach(linea => {
@@ -18,7 +17,6 @@ async function cargarCSV() {
       fila.appendChild(celda);
     });
 
-    // Botón para generar QR
     const celdaQR = document.createElement('td');
     const botonQR = document.createElement('button');
     botonQR.textContent = 'Ver QR';
@@ -37,38 +35,40 @@ function quitarAcentos(texto) {
 }
 
 function generarQR(columnas) {
-  // Elimina QR e info anteriores si existen
-  let contenedorQR = document.getElementById('qr-contenedor');
-  if (contenedorQR) contenedorQR.remove();
+  const etiquetas = [
+    "ID", "Producto", "Cantidad", "Usuario", "Edificio",
+    "Localización", "Número de Serie", "Fecha de Entrada", "Contrato"
+  ];
 
-  // Crear contenedor para QR e info
-  contenedorQR = document.createElement('div');
-  contenedorQR.id = 'qr-contenedor';
-  contenedorQR.style.marginTop = '30px';
-  document.body.appendChild(contenedorQR);
+  const info = columnas.map((valor, i) =>
+    `${etiquetas[i]}: ${quitarAcentos(valor)}`
+  ).join('\n');
 
-  const info = 
-`ID: ${quitarAcentos(columnas[0])}
-Producto: ${quitarAcentos(columnas[1])}
-Cantidad: ${quitarAcentos(columnas[2])}
-Usuario: ${quitarAcentos(columnas[3])}
-Edificio: ${quitarAcentos(columnas[4])}
-Localizacion: ${quitarAcentos(columnas[5])}`;
+  const qrContainer = document.getElementById('qr-container');
+  qrContainer.innerHTML = '';
 
-  // Mostrar texto
   const pre = document.createElement('pre');
   pre.textContent = info;
-  contenedorQR.appendChild(pre);
+  qrContainer.appendChild(pre);
 
-  // Generar QR
   const qrDiv = document.createElement('div');
-  contenedorQR.appendChild(qrDiv);
+  qrContainer.appendChild(qrDiv);
 
-  new QRCode(qrDiv, {
-    text: info,
-    width: 128,
-    height: 128,
+  const qrCode = new QRCodeStyling({
+    width: 200,
+    height: 200,
+    type: "svg",
+    data: info,
+    dotsOptions: {
+      color: "#000",
+      type: "square"
+    },
+    backgroundOptions: {
+      color: "#ffffff"
+    }
   });
+
+  qrCode.append(qrDiv);
 }
 
 cargarCSV();

@@ -1,24 +1,28 @@
 body {
-  font-family: Arial, sans-serif;
+  font-family: sans-serif;
   padding: 20px;
+  background-color: #f4f4f4;
 }
 
 table {
-  width: 100%;
   border-collapse: collapse;
-  margin-bottom: 20px;
+  width: 100%;
+  background-color: #fff;
 }
 
 th, td {
+  padding: 10px;
   border: 1px solid #ccc;
-  padding: 8px;
-  text-align: left;
+  text-align: center;
 }
 
-tr:hover {
-  background-color: #f0f0f0;
+button {
+  padding: 5px 10px;
+  cursor: pointer;
 }
 
-#qr {
-  margin-top: 20px;
+#qr-container {
+  padding: 20px;
+  background-color: #fff;
+  display: inline-block;
 }
