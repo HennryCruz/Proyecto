@@ -69,9 +69,35 @@ function generarQR(columnas) {
   btnDescargar.style.marginTop = '10px';
   btnDescargar.addEventListener('click', () => {
     if (qrCodeGlobal) {
-      qrCodeGlobal.download({
-        name: `QR_${columnas[0]}`,
-        extension: "png"
+      qrCodeGlobal.getRawData("png").then(blob => {
+        const img = new Image();
+        img.src = URL.createObjectURL(blob);
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const padding = 20;
+          const width = img.width;
+          const height = img.height + 40;
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0);
+
+          ctx.fillStyle = "#000000";
+          ctx.font = "16px sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText(`ID: ${columnas[0]}`, width / 2, img.height + 25);
+
+          canvas.toBlob(blobFinal => {
+            const link = document.createElement('a');
+            link.download = `QR_${columnas[0]}.png`;
+            link.href = URL.createObjectURL(blobFinal);
+            link.click();
+          });
+        };
       });
     }
   });
