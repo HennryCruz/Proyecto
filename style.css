@@ -1,28 +1,62 @@
+/* Fondo y tipografía */
 body {
-  font-family: sans-serif;
-  padding: 20px;
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif, sans-serif;
   background-color: #f4f4f4;
-}
-
-table {
-  border-collapse: collapse;
-  width: 100%;
-  background-color: #fff;
-}
-
-th, td {
-  padding: 10px;
-  border: 1px solid #ccc;
+  padding: 20px;
+  margin: 0;
   text-align: center;
 }
 
-button {
-  padding: 5px 10px;
-  cursor: pointer;
+/* Título centrado */
+h1 {
+  text-align: center;
+  margin-bottom: 30px;
 }
 
+/* Tabla centrada */
+table {
+  margin: 0 auto;
+  border-collapse: collapse;
+  background-color: #fff;
+  width: auto; /* 🔑 Ancho según contenido */
+  max-width: 95vw; /* 🔒 No excede la pantalla */
+  table-layout: auto; /* 🔑 Permite ajustar columnas al contenido */
+}
+
+/* Cabeceras y celdas */
+th, td {
+  border: 1px solid #ccc;
+  padding: 10px;
+  text-align: left;
+  vertical-align: top;
+  white-space: normal; /* 🔑 Permite saltos de línea */
+  word-break: break-word; /* 🔑 Rompe palabras largas */
+}
+
+/* Botones */
+button {
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+/* Contenedor del QR */
 #qr-container {
+  margin-top: 30px;
   padding: 20px;
   background-color: #fff;
   display: inline-block;
+  text-align: left;
+  word-break: break-word;
+}
+
+/* Responsive */
+@media screen and (max-width: 768px) {
+  table {
+    font-size: 14px;
+  }
+
+  th, td {
+    padding: 8px;
+  }
 }
