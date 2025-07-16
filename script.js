@@ -34,6 +34,8 @@ function quitarAcentos(texto) {
   return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
+let qrCodeGlobal = null;
+
 function generarQR(columnas) {
   const etiquetas = [
     "ID", "Producto", "Cantidad", "Usuario", "Edificio",
@@ -41,24 +43,53 @@ function generarQR(columnas) {
   ];
 
   const info = columnas.map((valor, i) =>
-    `${etiquetas[i]}: ${quitarAcentos(valor)}`
+    `${etiquetas[i]}: ${quitarAcentos(valor).replace(/\n/g, ' ').replace(/\r/g, '')}`
   ).join('\n');
 
   const qrContainer = document.getElementById('qr-container');
   qrContainer.innerHTML = '';
 
-  const pre = document.createElement('pre');
-  pre.textContent = info;
-  qrContainer.appendChild(pre);
+  const wrapper = document.createElement('div');
+  wrapper.style.display = 'flex';
+  wrapper.style.flexDirection = 'column';
+  wrapper.style.alignItems = 'center';
+  wrapper.style.justifyContent = 'center';
 
   const qrDiv = document.createElement('div');
-  qrContainer.appendChild(qrDiv);
+  wrapper.appendChild(qrDiv);
+
+  const idTexto = document.createElement('p');
+  idTexto.textContent = `ID: ${columnas[0]}`;
+  idTexto.style.marginTop = '10px';
+  idTexto.style.fontWeight = 'bold';
+  wrapper.appendChild(idTexto);
+
+  const btnDescargar = document.createElement('button');
+  btnDescargar.textContent = 'Descargar QR';
+  btnDescargar.style.marginTop = '10px';
+  btnDescargar.addEventListener('click', () => {
+    if (qrCodeGlobal) {
+      qrCodeGlobal.download({
+        name: `QR_${columnas[0]}`,
+        extension: "png"
+      });
+    }
+  });
+  wrapper.appendChild(btnDescargar);
+
+  qrContainer.appendChild(wrapper);
 
   const qrCode = new QRCodeStyling({
     width: 200,
     height: 200,
     type: "svg",
     data: info,
+    image: "titulo.png",
+    imageOptions: {
+      crossOrigin: "anonymous",
+      margin: 5,
+      imageSize: 0.3
+    },
     dotsOptions: {
       color: "#000",
       type: "square"
@@ -69,6 +100,7 @@ function generarQR(columnas) {
   });
 
   qrCode.append(qrDiv);
+  qrCodeGlobal = qrCode;
 }
 
 cargarCSV();
