@@ -1,9 +1,9 @@
 ID,Producto,Cantidad,Usuario,Edificio,Localizacion,No° Seire,Fecha de Entrada,Contrato
-1,Nitrogeno 5.0,1,Hennry Rene de Jesus Cruz Gomez,M,Interior,,17/07/2025,ADQ-2026-200
-2,Nitrogeno 5.0,1,Edgar Alejandro Rivera Gallegos,F,Caseta F,,30/05/2025,ADQ-2025-28
-3,Nitrogeno 5.0,1,Edgar Alejandro Rivera Gallegos,F,Caseta F,,30/05/2025,ADQ-2025-28
-4,Helio 5.0,1,Edgar Alejandro Rivera Gallegos,F,Caseta F,,30/05/2025,ADQ-2025-28
-5,Nitrogeno 5.0,1,Edgar Alejandro Rivera Gallegos,F,Pasillo de Ductos,,10/07/2025,ADQ-2025-28
+1,Nitrogeno 5.0,1,Hennry Rene de Jesus,F,Caseta F,,30/05/2025,ADQ-2025-28
+2,Nitrogeno 5.0,1,Hennry Rene de Jesus,F,Caseta F,,30/05/2025,ADQ-2025-28
+3,Nitrogeno 5.0,1,Hennry Rene de Jesus,F,Caseta F,,30/05/2025,ADQ-2025-28
+4,Helio 5.0,1,Hennry Rene de Jesus,F,Caseta F,,30/05/2025,ADQ-2025-28
+5,Nitrogeno 5.0,1,Hennry Rene de Jesus,F,Pasillo de Ductos,,10/07/2025,ADQ-2025-28
 6,Aire Extra Seco,1,Francisco Huerta,D,Interior,,08/07/2025,ADQ-2025-28
 7,Aire Extra Seco,1,Francisco Huerta,D,Interior,,08/07/2025,ADQ-2025-28
 8,Propano,1,Francisco Rangel Murillo,Q,Caseta QS1,,24/03/2025,ADQ-2025-28
