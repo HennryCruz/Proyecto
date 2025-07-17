@@ -1,46 +1,40 @@
-/* Fondo y tipografía */
 body {
-  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif, sans-serif;
+  font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
   background-color: #f4f4f4;
   padding: 20px;
   margin: 0;
   text-align: center;
 }
 
-/* Título centrado */
 h1 {
   text-align: center;
   margin-bottom: 30px;
 }
 
-/* Tabla centrada */
 table {
   margin: 0 auto;
   border-collapse: collapse;
   background-color: #fff;
-  width: auto; /*Ancho según contenido*/
-  max-width: 95vw; /*No excede la pantalla*/
-  table-layout: auto; /*Permite ajustar columnas al contenido*/
+  width: auto;
+  max-width: 95vw;
+  table-layout: auto;
 }
 
-/*Cabeceras y celdas*/
 th, td {
   border: 1px solid #ccc;
   padding: 10px;
-  text-align: left;
-  vertical-align: top;
-  white-space: normal; /*Permite saltos de línea*/
-  word-break: break-word; /*Rompe palabras largas*/
+  text-align: center;
+  vertical-align: middle;
+  white-space: normal;
+  word-break: break-word;
 }
 
-/* Botones */
 button {
   padding: 6px 12px;
   cursor: pointer;
   font-size: 14px;
 }
 
-/* Contenedor del QR */
 #qr-container {
   margin-top: 30px;
   padding: 20px;
@@ -50,7 +44,6 @@ button {
   word-break: break-word;
 }
 
-/* Responsive */
 @media screen and (max-width: 768px) {
   table {
     font-size: 14px;
@@ -59,10 +52,4 @@ button {
   th, td {
     padding: 8px;
   }
-}
-
-/* Centrar texto de la tabla */
-#tabla th, #tabla td {
-  text-align: center;
-  vertical-align: middle;
 }
