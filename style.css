@@ -18,19 +18,19 @@ table {
   margin: 0 auto;
   border-collapse: collapse;
   background-color: #fff;
-  width: auto; /* 🔑 Ancho según contenido */
-  max-width: 95vw; /* 🔒 No excede la pantalla */
-  table-layout: auto; /* 🔑 Permite ajustar columnas al contenido */
+  width: auto; /*Ancho según contenido*/
+  max-width: 95vw; /*No excede la pantalla*/
+  table-layout: auto; /*Permite ajustar columnas al contenido*/
 }
 
-/* Cabeceras y celdas */
+/*Cabeceras y celdas*/
 th, td {
   border: 1px solid #ccc;
   padding: 10px;
   text-align: left;
   vertical-align: top;
-  white-space: normal; /* 🔑 Permite saltos de línea */
-  word-break: break-word; /* 🔑 Rompe palabras largas */
+  white-space: normal; /*Permite saltos de línea*/
+  word-break: break-word; /*Rompe palabras largas*/
 }
 
 /* Botones */
@@ -59,4 +59,10 @@ button {
   th, td {
     padding: 8px;
   }
+}
+
+/* Centrar texto de la tabla */
+#tabla th, #tabla td {
+  text-align: center;
+  vertical-align: middle;
 }

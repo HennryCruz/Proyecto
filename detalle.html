@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Detalle del Cilindro</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background-color: #f4f4f4;
+      color: #333;
+      text-align: center;
+    }
+    .contenedor {
+      background-color: #fff;
+      padding: 20px;
+      display: inline-block;
+      text-align: left;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    h1 {
+      margin-bottom: 20px;
+    }
+    li {
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Detalle del Cilindro</h1>
+  <div class="contenedor" id="detalle">
+    Cargando...
+  </div>
+
+  <script>
+    async function cargarDetalle() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const idBuscado = urlParams.get('id');
+
+      const response = await fetch('data.csv');
+      const data = await response.text();
+      const filas = data.trim().split('\n').slice(1); // Omite encabezados
+
+      for (let fila of filas) {
+        const columnas = fila.split(',');
+        if (columnas[0] === idBuscado) {
+          document.getElementById('detalle').innerHTML = `
+            <ul>
+              <li><strong>ID:</strong> ${columnas[0]}</li>
+              <li><strong>Producto:</strong> ${columnas[1]}</li>
+              <li><strong>Cantidad:</strong> ${columnas[2]}</li>
+              <li><strong>Usuario:</strong> ${columnas[3]}</li>
+              <li><strong>Edificio:</strong> ${columnas[4]}</li>
+              <li><strong>Localización:</strong> ${columnas[5]}</li>
+              <li><strong>No° Serie:</strong> ${columnas[6]}</li>
+              <li><strong>Fecha de Entrada:</strong> ${columnas[7]}</li>
+              <li><strong>Contrato:</strong> ${columnas[8]}</li>
+            </ul>
+          `;
+          return;
+        }
+      }
+
+      document.getElementById('detalle').innerHTML = `<p><strong>Error:</strong> Cilindro con ID "${idBuscado}" no encontrado.</p>`;
+    }
+
+    cargarDetalle();
+  </script>
+</body>
+</html>

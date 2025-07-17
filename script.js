@@ -25,7 +25,6 @@ async function cargarCSV() {
     });
     celdaQR.appendChild(botonQR);
     fila.appendChild(celdaQR);
-
     cuerpo.appendChild(fila);
   });
 }
