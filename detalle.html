@@ -6,8 +6,10 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>Detalle del cilindro</h1>
-  <div id="contenido">Cargando...</div>
+  <div class="container">
+    <h1>Detalle del cilindro</h1>
+    <div id="contenido">Cargando...</div>
+  </div>
 
   <script>
     async function mostrarDetalle() {
@@ -17,8 +19,7 @@
       const response = await fetch("data.csv?" + new Date().getTime());
       const data = await response.text();
       const filas = data.trim().split("\n").slice(1);
-
-      const datos = filas.map(f => f.split(","));
+      const datos = filas.map(f => f.split(','));
       const fila = datos.find(col => col[0] === idBuscado);
 
       if (fila) {
@@ -28,11 +29,10 @@
             <li><strong>Producto:</strong> ${fila[1]}</li>
             <li><strong>Cantidad:</strong> ${fila[2]}</li>
             <li><strong>Usuario:</strong> ${fila[3]}</li>
-            <li><strong>Edificio:</strong> ${fila[4]}</li>
-            <li><strong>Localización:</strong> ${fila[5]}</li>
-            <li><strong>No. Serie:</strong> ${fila[6]}</li>
-            <li><strong>Fecha de Entrada:</strong> ${fila[7]}</li>
-            <li><strong>Contrato:</strong> ${fila[8]}</li>
+            <li><strong>Localización:</strong> ${fila[4]}</li>
+            <li><strong>No° Serie:</strong> ${fila[5]}</li>
+            <li><strong>Fecha Entrada:</strong> ${fila[6]}</li>
+            <li><strong>Contrato:</strong> ${fila[7]}</li>
           </ul>
         `;
       } else {

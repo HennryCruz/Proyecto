@@ -2,32 +2,31 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Cilindros CENAM</title>
+  <title>Cilindros</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.5.0/lib/qr-code-styling.js"></script>
 </head>
 <body>
-  <h1>Cilindros</h1>
-  <table id="tabla">
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>Producto</th>
-        <th>Cantidad</th>
-        <th>Usuario</th>
-        <th>Edificio</th>
-        <th>Localización</th>
-        <th>No° Serie</th>
-        <th>Fecha de Entrada</th>
-        <th>Contrato</th>
-        <th>Ver QR</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-
-  <div id="qr-container"></div>
-
+  <div class="container">
+    <h1>Cilindros</h1>
+    <table id="tabla">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Producto</th>
+          <th>Cantidad</th>
+          <th>Usuario</th>
+          <th>Localización</th>
+          <th>No° Serie</th>
+          <th>Fecha Entrada</th>
+          <th>Contrato</th>
+          <th>QR</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div id="qr-container"></div>
+  </div>
   <script src="script.js"></script>
 </body>
 </html>

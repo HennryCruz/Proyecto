@@ -1,50 +1,64 @@
-// URL base de tu sitio en Netlify
-const BASE_URL = "https://cilindros.netlify.app/detalle.html?id=";
-
-document.addEventListener("DOMContentLoaded", async () => {
-  const response = await fetch("data.csv?" + new Date().getTime());
+async function cargarCSV() {
+  const response = await fetch('data.csv');
   const data = await response.text();
-  const filas = data.trim().split("\n").slice(1);
-  const tabla = document.querySelector("#tabla tbody");
+  const filas = data.trim().split('\n');
+  const cuerpo = document.querySelector('#tabla tbody');
 
-  filas.forEach(fila => {
-    const columnas = fila.split(",");
-    const tr = document.createElement("tr");
+  cuerpo.innerHTML = '';
+
+  filas.slice(1).forEach(linea => {
+    const columnas = linea.split(',');
+    const fila = document.createElement('tr');
 
     columnas.forEach(col => {
-      const td = document.createElement("td");
-      td.textContent = col;
-      tr.appendChild(td);
+      const celda = document.createElement('td');
+      celda.textContent = col;
+      fila.appendChild(celda);
     });
 
-    const botonTD = document.createElement("td");
-    const boton = document.createElement("button");
-    boton.textContent = "Ver QR";
-    boton.addEventListener("click", () => generarQR(columnas[0])); // ID
-    botonTD.appendChild(boton);
-    tr.appendChild(botonTD);
+    const celdaQR = document.createElement('td');
+    const botonQR = document.createElement('button');
+    botonQR.textContent = 'Ver QR';
+    botonQR.addEventListener('click', () => {
+      mostrarQR(columnas[0]); // Solo el ID
+    });
+    celdaQR.appendChild(botonQR);
+    fila.appendChild(celdaQR);
 
-    tabla.appendChild(tr);
+    cuerpo.appendChild(fila);
   });
-});
+}
 
-let qrCode; // global
+function mostrarQR(id) {
+  const qrContainer = document.getElementById('qr-container');
+  qrContainer.innerHTML = '';
 
-function generarQR(id) {
-  const qrDiv = document.getElementById("qr-container");
-  qrDiv.innerHTML = ""; // Limpiar
+  const wrapper = document.createElement('div');
+  wrapper.style.display = 'flex';
+  wrapper.style.flexDirection = 'column';
+  wrapper.style.alignItems = 'center';
 
-  const url = `https://cilindros.netlify.app/detalle.html?id=${id}`;
+  const qrDiv = document.createElement('div');
+  wrapper.appendChild(qrDiv);
 
-  qrCode = new QRCodeStyling({
-    width: 200,
-    height: 200,
+  const textoID = document.createElement('p');
+  textoID.textContent = `ID: ${id}`;
+  wrapper.appendChild(textoID);
+
+  const qrCode = new QRCodeStyling({
+    width: 220,
+    height: 220,
     type: "svg",
-    data: url,
-    image: "",
+    data: `https://cilindros.netlify.app/detalle.html?id=${id}`,
+    image: "titulo.png",
+    imageOptions: {
+      crossOrigin: "anonymous",
+      margin: 5,
+      imageSize: 0.3
+    },
     dotsOptions: {
-      color: "#000",
-      type: "rounded"
+      color: "#000000",
+      type: "square"
     },
     backgroundOptions: {
       color: "#ffffff"
@@ -52,15 +66,7 @@ function generarQR(id) {
   });
 
   qrCode.append(qrDiv);
-
-  // Botón de descarga
-  const botonDescarga = document.createElement("button");
-  botonDescarga.textContent = "Descargar QR";
-  botonDescarga.style.display = "block";
-  botonDescarga.style.margin = "10px auto";
-  botonDescarga.addEventListener("click", () => {
-    qrCode.download({ name: `QR_${id}`, extension: "png" });
-  });
-
-  qrDiv.appendChild(botonDescarga);
+  qrContainer.appendChild(wrapper);
 }
+
+cargarCSV();
