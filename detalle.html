@@ -4,10 +4,71 @@
   <meta charset="UTF-8">
   <title>Detalle del Cilindro</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f0f2f5;
+      color: #333;
+      margin: 0;
+      padding: 0;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: 50px auto;
+      padding: 30px;
+      background-color: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    }
+
+    h1 {
+      font-size: 24px;
+      text-align: center;
+      margin-bottom: 30px;
+      color: #222;
+    }
+
+    ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    li {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid #eee;
+      font-size: 16px;
+    }
+
+    li:last-child {
+      border-bottom: none;
+    }
+
+    li strong {
+      color: #555;
+      flex: 0 0 45%;
+      text-align: right;
+      margin-right: 10px;
+    }
+
+    li span {
+      flex: 1;
+      text-align: left;
+      color: #333;
+    }
+
+    .error {
+      text-align: center;
+      color: red;
+      font-weight: bold;
+    }
+  </style>
 </head>
 <body>
   <div class="container">
-    <h1>Detalle del cilindro</h1>
+    <h1>Detalle del Cilindro</h1>
     <div id="contenido">Cargando...</div>
   </div>
 
@@ -25,18 +86,18 @@
       if (fila) {
         document.getElementById("contenido").innerHTML = `
           <ul>
-            <li><strong>ID:</strong> ${fila[0]}</li>
-            <li><strong>Producto:</strong> ${fila[1]}</li>
-            <li><strong>Cantidad:</strong> ${fila[2]}</li>
-            <li><strong>Usuario:</strong> ${fila[3]}</li>
-            <li><strong>Localización:</strong> ${fila[4]}</li>
-            <li><strong>No° Serie:</strong> ${fila[5]}</li>
-            <li><strong>Fecha Entrada:</strong> ${fila[6]}</li>
-            <li><strong>Contrato:</strong> ${fila[7]}</li>
+            <li><strong>ID:</strong> <span>${fila[0]}</span></li>
+            <li><strong>Producto:</strong> <span>${fila[1]}</span></li>
+            <li><strong>Cantidad:</strong> <span>${fila[2]}</span></li>
+            <li><strong>Usuario:</strong> <span>${fila[3]}</span></li>
+            <li><strong>Localización:</strong> <span>${fila[4]}</span></li>
+            <li><strong>No° Serie:</strong> <span>${fila[5]}</span></li>
+            <li><strong>Fecha Entrada:</strong> <span>${fila[6]}</span></li>
+            <li><strong>Contrato:</strong> <span>${fila[7]}</span></li>
           </ul>
         `;
       } else {
-        document.getElementById("contenido").textContent = "ID no encontrado.";
+        document.getElementById("contenido").innerHTML = `<p class="error">ID no encontrado.</p>`;
       }
     }
 
