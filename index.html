@@ -1,14 +1,94 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Cilindros</title>
-  <link rel="stylesheet" href="style.css">
-  <script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.5.0/lib/qr-code-styling.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cilindros QR Dinámicos</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f4f4f4;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+    }
+
+    h1 {
+      margin-bottom: 30px;
+    }
+
+    .table-container {
+      overflow-x: auto;
+      max-width: 100%;
+    }
+
+    table {
+      margin: auto;
+      border-collapse: collapse;
+      width: 100%;
+      max-width: 100%;
+      background-color: white;
+    }
+
+    th, td {
+      border: 1px solid #ddd;
+      padding: 10px;
+      text-align: center;
+      font-size: 14px;
+    }
+
+    #qr-section {
+      margin-top: 30px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #qr-container {
+      background: #fff;
+      padding: 20px;
+      display: inline-block;
+      border-radius: 10px;
+    }
+
+    #id-referencia {
+      margin-top: 10px;
+      font-weight: bold;
+    }
+
+    #descargarBtn {
+      margin-top: 15px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      border: none;
+      background-color: #007BFF;
+      color: #fff;
+      border-radius: 5px;
+    }
+
+    button {
+      cursor: pointer;
+      padding: 6px 12px;
+      font-size: 14px;
+    }
+
+    @media screen and (max-width: 768px) {
+      table {
+        font-size: 13px;
+      }
+
+      th, td {
+        padding: 8px;
+      }
+    }
+  </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Cilindros</h1>
+  <h1>Inventario de Cilindros</h1>
+
+  <div class="table-container">
     <table id="tabla">
       <thead>
         <tr>
@@ -18,15 +98,86 @@
           <th>Usuario</th>
           <th>Localización</th>
           <th>No° Serie</th>
-          <th>Fecha Entrada</th>
+          <th>Fecha de Entrada</th>
           <th>Contrato</th>
-          <th>QR</th>
+          <th>Ver QR</th>
         </tr>
       </thead>
       <tbody></tbody>
     </table>
-    <div id="qr-container"></div>
   </div>
-  <script src="script.js"></script>
+
+  <div id="qr-section">
+    <div id="qr-container"></div>
+    <div id="id-referencia"></div>
+    <button id="descargarBtn">Descargar QR</button>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.5.0/lib/qr-code-styling.js"></script>
+  <script>
+    const qrCode = new QRCodeStyling({
+      width: 250,
+      height: 250,
+      type: "png",
+      data: "",
+      image: "titulo.png", // Marca de agua/logo
+      dotsOptions: {
+        color: "#000",
+        type: "rounded"
+      },
+      backgroundOptions: {
+        color: "#ffffff"
+      },
+      imageOptions: {
+        crossOrigin: "anonymous",
+        margin: 8
+      }
+    });
+
+    const tabla = document.querySelector("#tabla tbody");
+    const qrContainer = document.getElementById("qr-container");
+    const botonDescarga = document.getElementById("descargarBtn");
+    const idReferencia = document.getElementById("id-referencia");
+    let idActual = "";
+
+    fetch("data.csv?" + new Date().getTime())
+      .then(res => res.text())
+      .then(data => {
+        const filas = data.trim().split("\n").slice(1);
+        filas.forEach(linea => {
+          const cols = linea.split(",");
+          const fila = document.createElement("tr");
+
+          for (let i = 0; i < 8; i++) {
+            const celda = document.createElement("td");
+            celda.textContent = cols[i] || "";
+            fila.appendChild(celda);
+          }
+
+          const celdaQR = document.createElement("td");
+          const botonQR = document.createElement("button");
+          botonQR.textContent = "Generar QR";
+          botonQR.onclick = () => {
+            idActual = cols[0];
+            const url = `${window.location.origin}/detalle.html?id=${idActual}`;
+            qrCode.update({ data: url });
+            qrContainer.innerHTML = "";
+            qrCode.append(qrContainer);
+            idReferencia.textContent = `ID: ${idActual}`;
+          };
+          celdaQR.appendChild(botonQR);
+          fila.appendChild(celdaQR);
+          tabla.appendChild(fila);
+        });
+      });
+
+    botonDescarga.addEventListener("click", () => {
+      if (!idActual) {
+        alert("Primero genera un QR.");
+        return;
+      }
+      qrCode.download({ name: `QR_${idActual}`, extension: "png" });
+    });
+  </script>
 </body>
 </html>

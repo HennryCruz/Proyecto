@@ -1,61 +1,93 @@
+/* Estilo general */
 body {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: #f0f2f5;
-  color: #333;
+  background-color: #f4f4f4;
   margin: 0;
-  padding: 0;
-}
-
-.container {
-  max-width: 90%;
-  margin: 40px auto;
   padding: 20px;
-  background-color: #fff;
-  border-radius: 10px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+  color: #333;
+  text-align: center;
 }
 
+/* Título */
 h1 {
-  text-align: center;
+  font-size: 2rem;
+  margin-bottom: 20px;
+}
+
+/* Contenedor para tabla responsive */
+.table-container {
+  width: 100%;
+  overflow-x: auto; /* Habilita scroll horizontal si es necesario */
   margin-bottom: 30px;
 }
 
+/* Tabla */
 table {
   width: 100%;
+  min-width: 800px; /* Ancho mínimo para evitar romper diseño */
   border-collapse: collapse;
-  margin-top: 20px;
+  background-color: #fff;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
 
 th, td {
-  padding: 12px 15px;
-  border-bottom: 1px solid #ddd;
+  padding: 12px 10px;
+  border: 1px solid #ddd;
   text-align: center;
+  vertical-align: middle;
+  font-size: 0.95rem;
+  white-space: normal;       /* 🔑 Permite saltos de línea */
+  word-break: break-word;    /* 🔑 Rompe palabras largas */
 }
 
-th {
-  background-color: #f9fafb;
-  color: #333;
+/* Botón de descarga */
+#boton-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
 }
 
 button {
-  padding: 6px 12px;
-  background-color: #007BFF;
+  padding: 10px 20px;
+  background-color: #2b7cff;
   color: white;
+  font-size: 1rem;
   border: none;
-  border-radius: 5px;
+  border-radius: 6px;
   cursor: pointer;
+  transition: background-color 0.2s ease;
 }
 
 button:hover {
-  background-color: #0056b3;
+  background-color: #1f60c4;
 }
 
+/* QR */
 #qr-container {
-  margin-top: 40px;
-  text-align: center;
+  background-color: #fff;
+  display: inline-block;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
 }
 
-#qr-container canvas,
-#qr-container svg {
-  margin-bottom: 15px;
+/* Responsive: Pantallas pequeñas */
+@media screen and (max-width: 768px) {
+  h1 {
+    font-size: 1.4rem;
+  }
+
+  table {
+    font-size: 0.85rem;
+  }
+
+  th, td {
+    padding: 8px;
+  }
+
+  button {
+    font-size: 0.9rem;
+    padding: 8px 16px;
+  }
 }
