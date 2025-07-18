@@ -8,6 +8,18 @@ body {
   text-align: center;
 }
 
+#buscador {
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.3s ease;
+}
+
+#buscador:focus {
+  border-color: #0077cc;
+}
+
+
 /* Título */
 h1 {
   font-size: 2rem;
