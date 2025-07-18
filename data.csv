@@ -1,47 +1,47 @@
-ID,Producto,Cantidad,Usuario,Edificio,Localizacion,No° Seire,Fecha de Entrada,Contrato
-1,Nitrogeno 5.0,1,Edgar Alejandro Rivera Galleos,F,Caseta F,,30/05/2025,ADQ-2025-28
-2,Nitrogeno 5.0,1,Edgar Alejandro Rivera Galleos,F,Caseta F,,30/05/2025,ADQ-2025-28
-3,Nitrogeno 5.0,1,Edgar Alejandro Rivera Galleos,F,Caseta F,,30/05/2025,ADQ-2025-28
-4,Helio 5.0,1,Edgar Alejandro Rivera Galleos,F,Caseta F,,30/05/2025,ADQ-2025-28
-5,Nitrogeno 5.0,1,Edgar Alejandro Rivera Galleos,F,Pasillo de Ductos,,10/07/2025,ADQ-2025-28
-6,Aire Extra Seco,1,Francisco Huerta,D,Interior,,08/07/2025,ADQ-2025-28
-7,Aire Extra Seco,1,Francisco Huerta,D,Interior,,08/07/2025,ADQ-2025-28
-8,Propano,1,Francisco Rangel Murillo,Q,Caseta QS1,,24/03/2025,ADQ-2025-28
-9,Aire Extra Seco,1,Francisco Rangel Murillo,Q,Caseta QS02,,22/05/2025,ADQ-2025-28
-10,Aire Extra Seco,1,Francisco Rangel Murillo,Q,Caseta QS02,,22/05/2025,ADQ-2025-28
-11,Nitrogeno Liquido 4.8,1,Francisco Rangel Murillo,Q,Pasillo Sotano,,29/05/2025,ADQ-2025-28
-12,Helio 5.0,1,Francisco Rangel Murillo,Q,Caseta QS02,,04/06/2025,ADQ-2025-28
-13,Helio 5.0,1,Francisco Rangel Murillo,Q,Caseta QS02,,04/06/2025,ADQ-2025-28
-14,Hidrogeno 4.8,1,Francisco Rangel Murillo,Q,Caseta QS02,,04/06/2025,ADQ-2025-28
-15,Hidrogeno 4.8,1,Francisco Rangel Murillo,Q,Caseta QS02,,04/06/2025,ADQ-2025-28
-16,Hidrogeno 4.8,1,Francisco Rangel Murillo,Q,Caseta QS02,,04/06/2025,ADQ-2025-28
-17,Nitrogeno 5.0,1,Francisco Rangel Murillo,Q,Caseta QS02,,04/06/2025,ADQ-2025-28
-18,Aire Extra Seco,1,Francisco Rangel Murillo,Q,Caseta QS02,,10/06/2025,ADQ-2025-28
-19,Oxigeno Industrial,1,Juan Delgadillo Martinez,K,Caseta K,,04/07/2025,ADQ-2025-28
-20,Oxigeno Industrial,1,Juan Delgadillo Martinez,K,Caseta K,,04/07/2025,ADQ-2025-28
-21,Argon 4.7,1,Juan Delgadillo Martinez,K,Caseta K,,04/07/2025,ADQ-2025-28
-22,Hidrogeno Industrial,1,Juan Delgadillo Martinez,K,Caseta k,,08/07/2025,ADQ-2025-28
-23,Hidrogeno Industrial,1,Juan Delgadillo Martinez,K,Caseta k,,08/07/2025,ADQ-2025-28
-24,Nitrogeno Liquido 4.8,1,Oscar Jesus Gonzalez Rodriguez,E,Interior,,24/03/2025,ADQ-2025-28
-25,Aire Extra Seco,1,Oscar Jesus Gonzalez Rodriguez,E,Interior,,02/07/2025,ADQ-2025-28
-26,Bioxido de Carbono,1,Oscar Jesus Gonzalez Rodriguez,E,Interior,,07/07/2025,ADQ-2025-28
-27,Argon 4.8 Liquido,1,Pedro Ramirez Cruz,Q,Caseta Q1,,28/03/2025,ADQ-2025-28
-28,Nitrogeno 4.8,1,Pedro Ramirez Cruz,C,Caseta C1,,05/06/2025,ADQ-2025-28
-29,Nitrogeno 4.8,1,Pedro Ramirez Cruz,C,Caseta C1,,05/06/2025,ADQ-2025-28
-30,Helio 4.6,1,Pedro Ramirez Cruz,C,Caseta C1,,05/06/2025,ADQ-2025-28
-31,Argon 5.0,1,Pedro Ramirez Cruz,Q,Caseta Q1,,24/06/2025,ADQ-2025-28
-32,Argon 5.0,1,Pedro Ramirez Cruz,Q,Caseta Q1,,24/06/2025,ADQ-2025-28
-33,Acetileno,1,Pedro Ramirez Cruz,Q,Caseta Q1,,25/06/2025,ADQ-2025-28
-34,Nitrogeno 4.8,1,Pedro Ramirez Cruz,C,Caseta C1,,26/06/2025,ADQ-2025-28
-35,Helio 4.8,1,Pedro Ramirez Cruz,C,Caseta C1,,02/07/2025,ADQ-2025-28
-36,Mezcla -P10,1,Saul Adrian Gallardo ,C,Lab C006,,24/03/2025,ADQ-2025-28
-37,Nitrogeno Liquido 4.8,1,Saul Adrian Gallardo ,L,Pasillo,,16/04/2025,ADQ-2025-28
-38,Aire Extra Seco,1,Susana Padilla Corral,L,Pasillo,,08/07/2025,ADQ-2025-28
-39,Oxigeno Industrial,1,Victor Manuel Serrano Caballero,Q,Caseta Q2,,02/04/2025,ADQ-2025-28
-40,Aire Extra Seco,1,Victor Manuel Serrano Caballero,Q,Caseta Q2,,07/04/2025,ADQ-2025-28
-41,Aire Extra Seco,1,Victor Manuel Serrano Caballero,Q,Caseta Q2,,07/04/2025,ADQ-2025-28
-42,Helio 4.8,1,Victor Manuel Serrano Caballero,Q,Caseta Q2,,09/04/2025,ADQ-2025-28
-43,Helio 4.8,1,Victor Manuel Serrano Caballero,Q,Caseta Q2,,09/04/2025,ADQ-2025-28
-44,Argon 5.0,1,Victor Manuel Serrano Caballero,Q,Caseta Q2,,14/04/2025,ADQ-2025-28
-45,Argon 5.0,1,Victor Manuel Serrano Caballero,C,Caseta C2,,14/04/2025,ADQ-2025-28
-46,Helio 5.0,1,Victor Manuel Serrano Caballero,Q,Caseta Q2,,13/05/2025,ADQ-2025-28
+ID,Producto,Cantidad,Usuario,Edificio,Localizacion,No° Serie,Fecha de Entrada,Contrato
+1,Nitrogeno 5.0,1,Edgar Alejandro Rivera Galleos,F,Caseta F,-,30/05/2025,ADQ-2025-28
+2,Nitrogeno 5.0,1,Edgar Alejandro Rivera Galleos,F,Caseta F,-,30/05/2025,ADQ-2025-28
+3,Nitrogeno 5.0,1,Edgar Alejandro Rivera Galleos,F,Caseta F,-,30/05/2025,ADQ-2025-28
+4,Helio 5.0,1,Edgar Alejandro Rivera Galleos,F,Caseta F,-,30/05/2025,ADQ-2025-28
+5,Nitrogeno 5.0,1,Edgar Alejandro Rivera Galleos,F,Pasillo de Ductos,-,10/07/2025,ADQ-2025-28
+6,Aire Extra Seco,1,Francisco Huerta,D,Interior,-,08/07/2025,ADQ-2025-28
+7,Aire Extra Seco,1,Francisco Huerta,D,Interior,-,08/07/2025,ADQ-2025-28
+8,Propano,1,Francisco Rangel Murillo,Q,Caseta QS1,-,24/03/2025,ADQ-2025-28
+9,Aire Extra Seco,1,Francisco Rangel Murillo,Q,Caseta QS02,-,22/05/2025,ADQ-2025-28
+10,Aire Extra Seco,1,Francisco Rangel Murillo,Q,Caseta QS02,-,22/05/2025,ADQ-2025-28
+11,Nitrogeno Liquido 4.8,1,Francisco Rangel Murillo,Q,Pasillo Sotano,-,29/05/2025,ADQ-2025-28
+12,Helio 5.0,1,Francisco Rangel Murillo,Q,Caseta QS02,-,04/06/2025,ADQ-2025-28
+13,Helio 5.0,1,Francisco Rangel Murillo,Q,Caseta QS02,-,04/06/2025,ADQ-2025-28
+14,Hidrogeno 4.8,1,Francisco Rangel Murillo,Q,Caseta QS02,-,04/06/2025,ADQ-2025-28
+15,Hidrogeno 4.8,1,Francisco Rangel Murillo,Q,Caseta QS02,-,04/06/2025,ADQ-2025-28
+16,Hidrogeno 4.8,1,Francisco Rangel Murillo,Q,Caseta QS02,-,04/06/2025,ADQ-2025-28
+17,Nitrogeno 5.0,1,Francisco Rangel Murillo,Q,Caseta QS02,-,04/06/2025,ADQ-2025-28
+18,Aire Extra Seco,1,Francisco Rangel Murillo,Q,Caseta QS02,-,10/06/2025,ADQ-2025-28
+19,Oxigeno Industrial,1,Juan Delgadillo Martinez,K,Caseta K,-,04/07/2025,ADQ-2025-28
+20,Oxigeno Industrial,1,Juan Delgadillo Martinez,K,Caseta K,-,04/07/2025,ADQ-2025-28
+21,Argon 4.7,1,Juan Delgadillo Martinez,K,Caseta K,-,04/07/2025,ADQ-2025-28
+22,Hidrogeno Industrial,1,Juan Delgadillo Martinez,K,Caseta k,-,08/07/2025,ADQ-2025-28
+23,Hidrogeno Industrial,1,Juan Delgadillo Martinez,K,Caseta k,-,08/07/2025,ADQ-2025-28
+24,Nitrogeno Liquido 4.8,1,Oscar Jesus Gonzalez Rodriguez,E,Interior,-,24/03/2025,ADQ-2025-28
+25,Aire Extra Seco,1,Oscar Jesus Gonzalez Rodriguez,E,Interior,-,02/07/2025,ADQ-2025-28
+26,Bioxido de Carbono,1,Oscar Jesus Gonzalez Rodriguez,E,Interior,-,07/07/2025,ADQ-2025-28
+27,Argon 4.8 Liquido,1,Pedro Ramirez Cruz,Q,Caseta Q1,-,28/03/2025,ADQ-2025-28
+28,Nitrogeno 4.8,1,Pedro Ramirez Cruz,C,Caseta C1,-,05/06/2025,ADQ-2025-28
+29,Nitrogeno 4.8,1,Pedro Ramirez Cruz,C,Caseta C1,-,05/06/2025,ADQ-2025-28
+30,Helio 4.6,1,Pedro Ramirez Cruz,C,Caseta C1,-,05/06/2025,ADQ-2025-28
+31,Argon 5.0,1,Pedro Ramirez Cruz,Q,Caseta Q1,-,24/06/2025,ADQ-2025-28
+32,Argon 5.0,1,Pedro Ramirez Cruz,Q,Caseta Q1,-,24/06/2025,ADQ-2025-28
+33,Acetileno,1,Pedro Ramirez Cruz,Q,Caseta Q1,-,25/06/2025,ADQ-2025-28
+34,Nitrogeno 4.8,1,Pedro Ramirez Cruz,C,Caseta C1,-,26/06/2025,ADQ-2025-28
+35,Helio 4.8,1,Pedro Ramirez Cruz,C,Caseta C1,-,02/07/2025,ADQ-2025-28
+36,Mezcla -P10,1,Saul Adrian Gallardo ,C,Lab C006,-,24/03/2025,ADQ-2025-28
+37,Nitrogeno Liquido 4.8,1,Saul Adrian Gallardo ,L,Pasillo,-,16/04/2025,ADQ-2025-28
+38,Aire Extra Seco,1,Susana Padilla Corral,L,Pasillo,-,08/07/2025,ADQ-2025-28
+39,Oxigeno Industrial,1,Victor Manuel Serrano Caballero,Q,Caseta Q2,-,02/04/2025,ADQ-2025-28
+40,Aire Extra Seco,1,Victor Manuel Serrano Caballero,Q,Caseta Q2,-,07/04/2025,ADQ-2025-28
+41,Aire Extra Seco,1,Victor Manuel Serrano Caballero,Q,Caseta Q2,-,07/04/2025,ADQ-2025-28
+42,Helio 4.8,1,Victor Manuel Serrano Caballero,Q,Caseta Q2,-,09/04/2025,ADQ-2025-28
+43,Helio 4.8,1,Victor Manuel Serrano Caballero,Q,Caseta Q2,-,09/04/2025,ADQ-2025-28
+44,Argon 5.0,1,Victor Manuel Serrano Caballero,Q,Caseta Q2,-,14/04/2025,ADQ-2025-28
+45,Argon 5.0,1,Victor Manuel Serrano Caballero,C,Caseta C2,-,14/04/2025,ADQ-2025-28
+46,Helio 5.0,1,Victor Manuel Serrano Caballero,Q,Caseta Q2,-,13/05/2025,ADQ-2025-28

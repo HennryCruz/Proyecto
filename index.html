@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Cilindros QR Dinámicos</title>
   <link rel="stylesheet" href="style.css" />
   <style>
@@ -27,7 +27,6 @@
       margin: auto;
       border-collapse: collapse;
       width: 100%;
-      max-width: 100%;
       background-color: white;
     }
 
@@ -91,16 +90,8 @@
   <div class="table-container">
     <table id="tabla">
       <thead>
-        <tr>
-          <th>ID</th>
-          <th>Producto</th>
-          <th>Cantidad</th>
-          <th>Usuario</th>
-          <th>Localización</th>
-          <th>No° Serie</th>
-          <th>Fecha de Entrada</th>
-          <th>Contrato</th>
-          <th>Ver QR</th>
+        <tr id="encabezados">
+          <!-- Encabezados se generan dinámicamente -->
         </tr>
       </thead>
       <tbody></tbody>
@@ -120,7 +111,7 @@
       height: 250,
       type: "png",
       data: "",
-      image: "titulo.png", // Marca de agua/logo
+      image: "titulo.png",
       dotsOptions: {
         color: "#000",
         type: "rounded"
@@ -135,6 +126,7 @@
     });
 
     const tabla = document.querySelector("#tabla tbody");
+    const encabezadosRow = document.getElementById("encabezados");
     const qrContainer = document.getElementById("qr-container");
     const botonDescarga = document.getElementById("descargarBtn");
     const idReferencia = document.getElementById("id-referencia");
@@ -143,20 +135,36 @@
     fetch("data.csv?" + new Date().getTime())
       .then(res => res.text())
       .then(data => {
-        const filas = data.trim().split("\n").slice(1);
-        filas.forEach(linea => {
-          const cols = linea.split(",");
+        const filas = data.trim().split("\n");
+        const encabezados = filas[0].split(",");
+        const registros = filas.slice(1).map(f => f.split(","));
+
+        // Agregar encabezados
+        encabezados.forEach(titulo => {
+          const th = document.createElement("th");
+          th.textContent = titulo;
+          encabezadosRow.appendChild(th);
+        });
+
+        // Agregar encabezado extra para el botón QR
+        const thQR = document.createElement("th");
+        thQR.textContent = "Ver QR";
+        encabezadosRow.appendChild(thQR);
+
+        // Agregar filas
+        registros.forEach(cols => {
           const fila = document.createElement("tr");
 
-          for (let i = 0; i < 8; i++) {
+          cols.forEach(valor => {
             const celda = document.createElement("td");
-            celda.textContent = cols[i] || "";
+            celda.textContent = valor;
             fila.appendChild(celda);
-          }
+          });
 
           const celdaQR = document.createElement("td");
           const botonQR = document.createElement("button");
           botonQR.textContent = "Generar QR";
+
           botonQR.onclick = () => {
             idActual = cols[0];
             const url = `${window.location.origin}/detalle.html?id=${idActual}`;
@@ -165,6 +173,7 @@
             qrCode.append(qrContainer);
             idReferencia.textContent = `ID: ${idActual}`;
           };
+
           celdaQR.appendChild(botonQR);
           fila.appendChild(celdaQR);
           tabla.appendChild(fila);
