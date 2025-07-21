@@ -1,5 +1,6 @@
+// Cargar el CSV y llenar la tabla
 async function cargarCSV() {
-  const response = await fetch('data.csv');
+  const response = await fetch('data.csv?' + new Date().getTime());
   const data = await response.text();
   const filas = data.trim().split('\n');
   const cuerpo = document.querySelector('#tabla tbody');
@@ -27,23 +28,21 @@ async function cargarCSV() {
 
     cuerpo.appendChild(fila);
   });
+
+  // Ocultar el botón "Descargar QR" al cargar
+  document.getElementById('btnDescargar').style.display = 'none';
 }
 
+// Mostrar QR y habilitar botón de descarga
 function mostrarQR(id) {
   const qrContainer = document.getElementById('qr-container');
-  qrContainer.innerHTML = '';
+  const qrCodeDiv = document.getElementById('qr-code');
+  const qrId = document.getElementById('qr-id');
+  const btnDescargar = document.getElementById('btnDescargar');
 
-  const wrapper = document.createElement('div');
-  wrapper.style.display = 'flex';
-  wrapper.style.flexDirection = 'column';
-  wrapper.style.alignItems = 'center';
-
-  const qrDiv = document.createElement('div');
-  wrapper.appendChild(qrDiv);
-
-  const textoID = document.createElement('p');
-  textoID.textContent = `ID: ${id}`;
-  wrapper.appendChild(textoID);
+  // Limpiar y mostrar ID
+  qrCodeDiv.innerHTML = '';
+  qrId.textContent = `ID: ${id}`;
 
   const qrCode = new QRCodeStyling({
     width: 220,
@@ -65,8 +64,27 @@ function mostrarQR(id) {
     }
   });
 
-  qrCode.append(qrDiv);
-  qrContainer.appendChild(wrapper);
+  qrCode.append(qrCodeDiv);
+
+  // Mostrar botón de descarga
+  btnDescargar.style.display = 'inline-block';
+  btnDescargar.onclick = () => {
+    qrCode.download({ name: `QR_ID_${id}`, extension: "png" });
+  };
 }
+
+// Buscador en tabla y oculta botón "Descargar QR"
+document.getElementById('buscador').addEventListener('input', function () {
+  const filtro = this.value.toLowerCase();
+  const filas = document.querySelectorAll('#tabla tbody tr');
+
+  filas.forEach(fila => {
+    const texto = fila.textContent.toLowerCase();
+    fila.style.display = texto.includes(filtro) ? '' : 'none';
+  });
+
+  // Ocultar botón de descarga al buscar
+  document.getElementById('btnDescargar').style.display = 'none';
+});
 
 cargarCSV();

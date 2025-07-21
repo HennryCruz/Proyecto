@@ -8,10 +8,21 @@ body {
   text-align: center;
 }
 
+/* Título */
+h1 {
+  font-size: 2rem;
+  margin-bottom: 20px;
+}
+
+/* Buscador */
 #buscador {
   border: 1px solid #ccc;
   border-radius: 6px;
   outline: none;
+  padding: 8px;
+  width: 300px;
+  font-size: 16px;
+  margin-bottom: 20px;
   transition: border-color 0.3s ease;
 }
 
@@ -19,24 +30,16 @@ body {
   border-color: #0077cc;
 }
 
-
-/* Título */
-h1 {
-  font-size: 2rem;
-  margin-bottom: 20px;
-}
-
-/* Contenedor para tabla responsive */
-.table-container {
+/* Tabla */
+.tabla-container {
   width: 100%;
-  overflow-x: auto; /* Habilita scroll horizontal si es necesario */
+  overflow-x: auto;
   margin-bottom: 30px;
 }
 
-/* Tabla */
 table {
   width: 100%;
-  min-width: 800px; /* Ancho mínimo para evitar romper diseño */
+  min-width: 800px;
   border-collapse: collapse;
   background-color: #fff;
   border-radius: 6px;
@@ -49,17 +52,11 @@ th, td {
   text-align: center;
   vertical-align: middle;
   font-size: 0.95rem;
-  white-space: normal;       /* 🔑 Permite saltos de línea */
-  word-break: break-word;    /* 🔑 Rompe palabras largas */
+  white-space: normal;
+  word-break: break-word;
 }
 
-/* Botón de descarga */
-#boton-container {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 20px;
-}
-
+/* Botones */
 button {
   padding: 10px 20px;
   background-color: #2b7cff;
@@ -75,7 +72,7 @@ button:hover {
   background-color: #1f60c4;
 }
 
-/* QR */
+/* Contenedor del QR */
 #qr-container {
   background-color: #fff;
   display: inline-block;
@@ -84,7 +81,7 @@ button:hover {
   box-shadow: 0 2px 10px rgba(0,0,0,0.05);
 }
 
-/* Responsive: Pantallas pequeñas */
+/* Responsive */
 @media screen and (max-width: 768px) {
   h1 {
     font-size: 1.4rem;
