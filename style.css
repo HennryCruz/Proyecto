@@ -1,7 +1,7 @@
 /* Estilo general */
 body {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: #f4f4f4;
+  background-color: #f7f8fa;
   margin: 0;
   padding: 20px;
   color: #333;
@@ -12,6 +12,8 @@ body {
 h1 {
   font-size: 2rem;
   margin-bottom: 20px;
+  font-weight: 500;
+  color: #222;
 }
 
 /* Buscador */
@@ -19,57 +21,92 @@ h1 {
   border: 1px solid #ccc;
   border-radius: 6px;
   outline: none;
-  padding: 8px;
+  padding: 8px 12px;
   width: 300px;
   font-size: 16px;
-  margin-bottom: 20px;
-  transition: border-color 0.3s ease;
+  margin-bottom: 30px;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  background-color: #fff;
 }
 
 #buscador:focus {
-  border-color: #0077cc;
+  border-color: #2b7cff;
+  box-shadow: 0 0 0 3px rgba(43, 124, 255, 0.2);
 }
 
-/* Tabla */
+/* Contenedor tabla */
 .tabla-container {
   width: 100%;
   overflow-x: auto;
   margin-bottom: 30px;
 }
 
+/* Tabla minimalista */
 table {
   width: 100%;
   min-width: 800px;
   border-collapse: collapse;
   background-color: #fff;
-  border-radius: 6px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.08);
 }
 
-th, td {
+th {
+  background-color: #f5f6f8;
+  font-weight: 600;
+  color: #333;
   padding: 12px 10px;
-  border: 1px solid #ddd;
   text-align: center;
-  vertical-align: middle;
   font-size: 0.95rem;
-  white-space: normal;
-  word-break: break-word;
+}
+
+td {
+  padding: 12px 10px;
+  border-top: 1px solid #d4d7dd;
+  text-align: center;
+  font-size: 0.95rem;
+  color: #444;
+  background-color: #fff;
+  transition: background-color 0.2s;
+}
+
+tbody tr:hover {
+  background-color: #f9fafb;
+}
+
+/* Estilo fila de total */
+#tabla tbody tr.total-fila {
+  font-weight: 600;
+  color: #222;
+}
+
+#tabla tbody tr.total-fila td {
+  background-color: transparent;
+  border-top: 2px solid #ddd;
+}
+
+#tabla tbody tr.total-fila td.total-etiqueta,
+#tabla tbody tr.total-fila td.total-valor {
+  background-color: #f0f1f4;
+  border-radius: 6px;
 }
 
 /* Botones */
 button {
-  padding: 10px 20px;
+  padding: 9px 18px;
   background-color: #2b7cff;
   color: white;
-  font-size: 1rem;
+  font-size: 0.95rem;
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 button:hover {
   background-color: #1f60c4;
+  box-shadow: 0 2px 6px rgba(43, 124, 255, 0.25);
 }
 
 /* Contenedor del QR */
@@ -77,8 +114,9 @@ button:hover {
   background-color: #fff;
   display: inline-block;
   padding: 20px;
-  border-radius: 8px;
+  border-radius: 10px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  margin-top: 30px;
 }
 
 /* Responsive */
@@ -87,8 +125,13 @@ button:hover {
     font-size: 1.4rem;
   }
 
+  #buscador {
+    width: 90%;
+  }
+
   table {
     font-size: 0.85rem;
+    min-width: 600px;
   }
 
   th, td {
