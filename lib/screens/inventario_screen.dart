@@ -8,6 +8,7 @@ import '../services/inventario_service.dart';
 import '../services/teorico_service.dart';
 import '../widgets/manual_entry_dialog.dart';
 import 'verificacion_screen.dart';
+import 'checklist_screen.dart';
 
 class InventarioScreen extends StatefulWidget {
   const InventarioScreen({super.key});
@@ -100,7 +101,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
       _mostrarError('Selecciona una localización primero');
       return;
     }
-
     final cveInterno = _catalogo.normalizarCveActivo(codigoEscaneado);
     final desc       = _catalogo.descripcionActivo(codigoEscaneado);
     final display    = codigoEscaneado.trim();
@@ -122,8 +122,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
       _esDuplicadoVisor = duplicado;
       _noEncontrado     = false;
     });
-
-    if (duplicado) return; // Solo recuadro naranja, sin diálogo
+    if (duplicado) return;
 
     final reg = RegistroInventario(
         localizacion: loc, cveActivo: cveInterno, fecha: DateTime.now());
@@ -132,7 +131,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
       _registros.add(reg);
       _escaneadosEnSesion.add(cveInterno.toUpperCase());
     });
-
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('✓ $display  $desc'),
@@ -159,43 +157,14 @@ class _InventarioScreenState extends State<InventarioScreen> {
     return aa.codigoNuevo == bb.codigoNuevo;
   }
 
-  // ── Eliminar registro individual ──────────────────────────────────
+  // ── Eliminar registro ─────────────────────────────────────────────
 
   Future<void> _eliminarRegistro(int index) async {
-    final reg = _registros[index];
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Eliminar registro'),
-        content: Text('¿Eliminar ${reg.cveActivo} de ${reg.localizacion}?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true) return;
-
     setState(() => _registros.removeAt(index));
-
-    // Reescribir archivo completo sin el registro eliminado
     await _inventario.borrarArchivo();
-    for (final r in _registros) {
-      await _inventario.agregarRegistro(r);
-    }
-
-    // Reconstruir set de escaneados
+    for (final r in _registros) await _inventario.agregarRegistro(r);
     _escaneadosEnSesion.clear();
-    for (final r in _registros) {
-      _escaneadosEnSesion.add(r.cveActivo.toUpperCase());
-    }
-
+    for (final r in _registros) _escaneadosEnSesion.add(r.cveActivo.toUpperCase());
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Registro eliminado'),
@@ -205,7 +174,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
     }
   }
 
-  // ── Verificar ─────────────────────────────────────────────────────
+  // ── Verificar ubicación ───────────────────────────────────────────
 
   void _verificarUbicacion() {
     if (_cveLocalizacion == null) {
@@ -220,41 +189,66 @@ class _InventarioScreenState extends State<InventarioScreen> {
       ));
       return;
     }
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => VerificacionScreen(
-          localizacion: _cveLocalizacion!,
-          registros:    _registros,
-          onActivoEscaneado: (codigo) => _insertarActivo(
-            codigo,
-            localizacionForzada: _cveLocalizacion,
-          ),
-        ),
+    Navigator.push(context, MaterialPageRoute(
+      builder: (_) => VerificacionScreen(
+        localizacion: _cveLocalizacion!,
+        registros:    _registros,
+        onActivoEscaneado: (codigo) =>
+            _insertarActivo(codigo, localizacionForzada: _cveLocalizacion),
       ),
-    ).then((_) => setState(() {})); // Refrescar al regresar
+    )).then((_) => setState(() {}));
   }
 
-  // ── Escáner ───────────────────────────────────────────────────────
+  // ── Ir a checklist ────────────────────────────────────────────────
+
+  void _abrirChecklist() {
+    Navigator.push(context, MaterialPageRoute(
+      builder: (_) => ChecklistScreen(
+        registros: _registros,
+        onActivoEscaneado: (codigo, loc) =>
+            _insertarActivo(codigo, localizacionForzada: loc),
+      ),
+    )).then((_) => setState(() {}));
+  }
+
+  // ── Escáner mejorado ──────────────────────────────────────────────
 
   void _abrirEscaner() {
     if (_cveLocalizacion == null) {
       _mostrarError('Selecciona una localización primero');
       return;
     }
-    _iniciarEscaner();
-  }
-
-  void _iniciarEscaner() {
     setState(() {
       _escaneando       = true;
       _codigoMostrado   = '';
       _descMostrada     = '';
       _esDuplicadoVisor = false;
       _noEncontrado     = false;
-      _scannerCtrl      = MobileScannerController(
-          detectionSpeed: DetectionSpeed.noDuplicates);
+      _scannerCtrl      = _crearControladorEscaner();
     });
+  }
+
+  /// Controlador con configuración optimizada para Code 128B deteriorado
+  MobileScannerController _crearControladorEscaner() {
+    return MobileScannerController(
+      // noDuplicates pero con ventana de tiempo mayor para etiquetas difíciles
+      detectionSpeed: DetectionSpeed.normal,
+      // Habilitar explícitamente los formatos relevantes
+      formats: const [
+        BarcodeFormat.code128,  // Código principal (Ixxxxx y Cxxxxx)
+        BarcodeFormat.code39,
+        BarcodeFormat.ean13,    // Código anterior (5xxxxxxxxxxx)
+        BarcodeFormat.ean8,
+        BarcodeFormat.itf,
+        BarcodeFormat.codabar,
+        BarcodeFormat.dataMatrix,
+        BarcodeFormat.qrCode,
+      ],
+      // Torch automático para etiquetas en lugares oscuros
+      torchEnabled: false,
+      // Auto enfoque continuo — clave para etiquetas deterioradas
+      autoStart: true,
+    );
   }
 
   void _cerrarEscaner() {
@@ -266,6 +260,10 @@ class _InventarioScreenState extends State<InventarioScreen> {
   void _onDetected(BarcodeCapture capture) {
     final codigo = capture.barcodes.firstOrNull?.rawValue;
     if (codigo != null && codigo.isNotEmpty) _insertarActivo(codigo);
+  }
+
+  void _toggleLinterna() {
+    _scannerCtrl?.toggleTorch();
   }
 
   // ── Registro manual ───────────────────────────────────────────────
@@ -281,8 +279,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
     );
     if (result != null && result.isNotEmpty) await _insertarActivo(result);
   }
-
-  // ── Borrar todo / Compartir ───────────────────────────────────────
 
   Future<void> _borrarArchivo() async {
     final confirm = await showDialog<bool>(
@@ -304,10 +300,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
     if (confirm == true) {
       await _inventario.borrarArchivo();
       setState(() { _registros.clear(); _escaneadosEnSesion.clear(); });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Archivo de inventario borrado')));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Archivo de inventario borrado')));
     }
   }
 
@@ -329,6 +323,12 @@ class _InventarioScreenState extends State<InventarioScreen> {
       appBar: AppBar(
         title: const Text('Inventario CENAM'),
         actions: [
+          // Botón checklist por empleado
+          IconButton(
+            icon: const Icon(Icons.person_search),
+            tooltip: 'Checklist por empleado',
+            onPressed: _abrirChecklist,
+          ),
           IconButton(icon: const Icon(Icons.share), tooltip: 'Compartir',
               onPressed: _registros.isEmpty ? null : _compartirArchivo),
           IconButton(icon: const Icon(Icons.delete_outline), tooltip: 'Borrar todo',
@@ -425,8 +425,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
     );
   }
 
-  // ── Lista con botón eliminar ──────────────────────────────────────
-
   Widget _buildLista() {
     if (_registros.isEmpty) {
       return const Center(
@@ -443,8 +441,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
         final r    = _registros[realIdx];
         final desc = _catalogo.descripcionActivo(r.cveActivo);
         final veces = _registros
-            .where((x) => _mismoActivo(x.cveActivo, r.cveActivo))
-            .length;
+            .where((x) => _mismoActivo(x.cveActivo, r.cveActivo)).length;
         final esDup = veces > 1;
 
         return Dismissible(
@@ -457,7 +454,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
             child: const Icon(Icons.delete, color: Colors.white),
           ),
           confirmDismiss: (_) async {
-            final confirm = await showDialog<bool>(
+            return await showDialog<bool>(
               context: context,
               builder: (_) => AlertDialog(
                 title: const Text('Eliminar registro'),
@@ -472,16 +469,9 @@ class _InventarioScreenState extends State<InventarioScreen> {
                   ),
                 ],
               ),
-            );
-            return confirm ?? false;
+            ) ?? false;
           },
-          onDismissed: (_) async {
-            setState(() => _registros.removeAt(realIdx));
-            await _inventario.borrarArchivo();
-            for (final reg in _registros) await _inventario.agregarRegistro(reg);
-            _escaneadosEnSesion.clear();
-            for (final reg in _registros) _escaneadosEnSesion.add(reg.cveActivo.toUpperCase());
-          },
+          onDismissed: (_) => _eliminarRegistro(realIdx),
           child: ListTile(
             dense: true,
             tileColor: esDup ? Colors.orange.shade50 : null,
@@ -513,7 +503,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
                   style: TextStyle(color: Colors.blue.shade700,
                       fontSize: 11, fontWeight: FontWeight.w500)),
               const SizedBox(width: 4),
-              // Botón eliminar
               GestureDetector(
                 onTap: () => _eliminarRegistro(realIdx),
                 child: Padding(
@@ -538,8 +527,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
         total = teo.length;
         final escSet = _registros
             .where((r) => r.localizacion.toUpperCase() == _cveLocalizacion)
-            .map((r) => r.cveActivo.toUpperCase())
-            .toSet();
+            .map((r) => r.cveActivo.toUpperCase()).toSet();
         escaneadosEnLoc = teo.where((a) =>
             escSet.contains(a.codigoNuevo) ||
             escSet.contains(a.codigoAnterior)).length;
@@ -590,12 +578,13 @@ class _InventarioScreenState extends State<InventarioScreen> {
     );
   }
 
-  // ── Vista escáner ─────────────────────────────────────────────────
+  // ── Vista escáner mejorada ────────────────────────────────────────
 
   Widget _buildEscaner() {
     return Stack(children: [
       MobileScanner(controller: _scannerCtrl!, onDetect: _onDetected),
       _buildOverlayConRecuadro(),
+      // Info superior
       Positioned(
         top: 0, left: 0, right: 0,
         child: Container(
@@ -612,6 +601,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
           ]),
         ),
       ),
+      // Panel inferior
       Positioned(
         bottom: 0, left: 0, right: 0,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -619,17 +609,31 @@ class _InventarioScreenState extends State<InventarioScreen> {
           Container(
             color: Colors.black.withOpacity(0.65),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
+            child: Row(children: [
+              // Linterna
+              GestureDetector(
+                onTap: _toggleLinterna,
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  margin: const EdgeInsets.only(right: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.flashlight_on,
+                      color: Colors.white, size: 26),
+                ),
+              ),
+              // Detener
+              Expanded(child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.red.shade700,
                     padding: const EdgeInsets.symmetric(vertical: 12)),
                 onPressed: _cerrarEscaner,
                 icon: const Icon(Icons.stop),
                 label: const Text('Detener escáner'),
-              ),
-            ),
+              )),
+            ]),
           ),
         ]),
       ),
@@ -640,7 +644,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
     return LayoutBuilder(builder: (context, constraints) {
       final w = constraints.maxWidth;
       final h = constraints.maxHeight;
-      const rW = 260.0, rH = 160.0;
+      // Recuadro más ancho para facilitar lectura de Code 128 (barras largas)
+      const rW = 300.0, rH = 140.0;
       final left = (w - rW) / 2;
       final top  = (h - rH) / 2 - 30;
 
@@ -661,10 +666,16 @@ class _InventarioScreenState extends State<InventarioScreen> {
           )),
         ),
         ..._buildEsquinas(left, top, rW, rH, borderColor),
+        // Línea guía central horizontal (ayuda a centrar el código)
+        Positioned(
+          left: left + 10, top: top + rH / 2 - 0.5, width: rW - 20,
+          height: 1,
+          child: Container(color: borderColor.withOpacity(0.5)),
+        ),
         Positioned(
           left: left, top: top + rH + 8, width: rW,
           child: Text(
-            _codigoMostrado.isEmpty ? 'Apunta el código al recuadro' : '',
+            _codigoMostrado.isEmpty ? 'Centra el código en el recuadro' : '',
             textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
@@ -674,7 +685,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
   }
 
   List<Widget> _buildEsquinas(double l, double t, double w, double h, Color c) {
-    const len = 20.0, thick = 3.5;
+    const len = 22.0, thick = 3.5;
     Widget corner(double x, double y, bool izq, bool arr) => Positioned(
       left: x, top: y,
       child: SizedBox(width: len, height: len,
@@ -682,8 +693,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
               color: c, thickness: thick, izquierda: izq, arriba: arr))),
     );
     return [
-      corner(l,         t,         true,  true),
-      corner(l + w - len, t,       false, true),
+      corner(l,         t,           true,  true),
+      corner(l + w - len, t,         false, true),
       corner(l,         t + h - len, true,  false),
       corner(l + w - len, t + h - len, false, false),
     ];
@@ -701,9 +712,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: bgColor.withOpacity(0.92),
-        borderRadius: BorderRadius.circular(10),
-      ),
+          color: bgColor.withOpacity(0.92),
+          borderRadius: BorderRadius.circular(10)),
       child: Row(children: [
         Icon(icono, color: Colors.white70, size: 22),
         const SizedBox(width: 10),
@@ -737,10 +747,8 @@ class _CornerPainter extends CustomPainter {
         ..strokeCap = StrokeCap.square ..style = PaintingStyle.stroke;
     final x  = izquierda ? 0.0 : size.width;
     final y  = arriba    ? 0.0 : size.height;
-    final dx = izquierda ? size.width  : -size.width;
-    final dy = arriba    ? size.height : -size.height;
-    canvas.drawLine(Offset(x, y), Offset(x + dx, y), p);
-    canvas.drawLine(Offset(x, y), Offset(x, y + dy), p);
+    canvas.drawLine(Offset(x, y), Offset(x + (izquierda ? size.width : -size.width), y), p);
+    canvas.drawLine(Offset(x, y), Offset(x, y + (arriba ? size.height : -size.height)), p);
   }
   @override
   bool shouldRepaint(_CornerPainter o) =>
