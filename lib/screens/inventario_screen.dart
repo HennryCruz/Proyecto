@@ -22,6 +22,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   bool _cargando = true;
   List<RegistroInventario> _registros = [];
+
+  // Claves internas ya escaneadas (siempre en formato Ixxxxx)
   final Set<String> _escaneadosEnSesion = {};
 
   String? _cveLocalizacion;
@@ -31,11 +33,13 @@ class _InventarioScreenState extends State<InventarioScreen> {
   bool         _mostrarSugerencias = false;
 
   MobileScannerController? _scannerCtrl;
-  bool   _escaneando       = false;
-  String _ultimoCodigo     = '';   // Código raw que leyó la cámara
-  String _ultimoCodigoNorm = '';   // Código normalizado (I.....)
-  String _ultimoDesc       = '';   // Descripción del último escaneado
-  bool   _ultimoEsDuplicado = false;
+  bool   _escaneando        = false;
+
+  // Estado del recuadro — guarda el código TAL COMO SE ESCANEÓ
+  String _codigoMostrado    = '';   // Lo que se muestra: exactamente lo escaneado
+  String _descMostrada      = '';
+  bool   _esNuevo           = false; // false=no escaneado aún  true=duplicado
+  bool   _noEncontrado      = false;
 
   @override
   void initState() {
@@ -101,145 +105,77 @@ class _InventarioScreenState extends State<InventarioScreen> {
       return;
     }
 
-    final cve  = _catalogo.normalizarCveActivo(codigoEscaneado);
+    // Código normalizado (siempre Ixxxxx o Cxxxxx) para guardar en archivo
+    final cveInterno = _catalogo.normalizarCveActivo(codigoEscaneado);
+
+    // Descripción buscando por cualquier código
     final desc = _catalogo.descripcionActivo(codigoEscaneado);
 
+    // ── Código que se muestra: exactamente el que escanearon ──────
+    // Si empieza con 5 (código antiguo) → muestra el 5xxxx
+    // Si empieza con I/C/P              → muestra el Ixxxx tal cual
+    final codigoDisplay = codigoEscaneado.trim();
+
     if (desc.isEmpty) {
-      // Mostrar en el recuadro que no se encontró
       setState(() {
-        _ultimoCodigo      = codigoEscaneado;
-        _ultimoCodigoNorm  = cve;
-        _ultimoDesc        = 'No encontrado en catálogo';
-        _ultimoEsDuplicado = false;
+        _codigoMostrado = codigoDisplay;
+        _descMostrada   = 'No encontrado en catálogo';
+        _esNuevo        = false;
+        _noEncontrado   = true;
       });
       return;
     }
 
-    // Verificar duplicado — tanto por código nuevo como por código anterior
-    final esDuplicado = _esDuplicado(cve);
+    // Verificar duplicado usando clave interna y también por teórico
+    final duplicado = _esDuplicado(cveInterno);
 
-    // Actualizar el recuadro de la cámara
+    // Actualizar recuadro con el código TAL COMO SE ESCANEÓ
     setState(() {
-      _ultimoCodigo      = codigoEscaneado;
-      _ultimoCodigoNorm  = cve;
-      _ultimoDesc        = desc;
-      _ultimoEsDuplicado = esDuplicado;
+      _codigoMostrado = codigoDisplay;
+      _descMostrada   = desc;
+      _esNuevo        = duplicado;   // naranja si duplicado
+      _noEncontrado   = false;
     });
 
-    if (esDuplicado) {
-      final regPrevio = _registros.lastWhere(
-        (r) => _mismoActivo(r.cveActivo, cve),
-        orElse: () => RegistroInventario(
-            localizacion: '?', cveActivo: cve, fecha: DateTime.now()),
-      );
-      final continuar = await _mostrarAlertaDuplicado(
-        cve: cve, desc: desc,
-        localizacionPrevia: regPrevio.localizacion,
-        fechaPrevia: regPrevio.fecha,
-      );
-      if (!continuar) return;
-    }
+    // Si es duplicado: solo mostrar recuadro naranja, SIN diálogo de confirmación
+    if (duplicado) return;
 
+    // Guardar con clave interna normalizada
     final reg = RegistroInventario(
-        localizacion: _cveLocalizacion!, cveActivo: cve, fecha: DateTime.now());
+        localizacion: _cveLocalizacion!,
+        cveActivo:    cveInterno,
+        fecha:        DateTime.now());
     await _inventario.agregarRegistro(reg);
     setState(() {
       _registros.add(reg);
-      _escaneadosEnSesion.add(cve.toUpperCase());
+      _escaneadosEnSesion.add(cveInterno.toUpperCase());
     });
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('✓ $cve  $desc'),
+        content: Text('✓ $codigoDisplay  $desc'),
         backgroundColor: Colors.green.shade700,
         duration: const Duration(seconds: 2),
       ));
     }
   }
 
-  /// Verifica si el código (normalizado) ya fue escaneado,
-  /// buscando tanto por código nuevo como por código anterior
-  bool _esDuplicado(String cveNorm) {
-    if (_escaneadosEnSesion.contains(cveNorm.toUpperCase())) return true;
-    // Buscar si algún registro existente apunta al mismo activo físico
-    final activo = _teorico.buscarPorCodigo(cveNorm);
+  /// Verifica duplicado por clave interna y también cruzando por teórico
+  bool _esDuplicado(String cveInterno) {
+    if (_escaneadosEnSesion.contains(cveInterno.toUpperCase())) return true;
+    final activo = _teorico.buscarPorCodigo(cveInterno);
     if (activo == null) return false;
     return _escaneadosEnSesion.contains(activo.codigoNuevo.toUpperCase()) ||
         (activo.codigoAnterior.isNotEmpty &&
             _escaneadosEnSesion.contains(activo.codigoAnterior));
   }
 
-  /// Compara si dos códigos (cualquier formato) apuntan al mismo activo
   bool _mismoActivo(String a, String b) {
     if (a.toUpperCase() == b.toUpperCase()) return true;
     final activoA = _teorico.buscarPorCodigo(a);
     final activoB = _teorico.buscarPorCodigo(b);
     if (activoA == null || activoB == null) return false;
     return activoA.codigoNuevo == activoB.codigoNuevo;
-  }
-
-  // ── Alerta duplicado ──────────────────────────────────────────────
-
-  Future<bool> _mostrarAlertaDuplicado({
-    required String cve, required String desc,
-    required String localizacionPrevia, required DateTime fechaPrevia,
-  }) async {
-    final fechaStr = DateFormat('dd/MM/yyyy HH:mm').format(fechaPrevia);
-    final result = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        icon: const Icon(Icons.warning_amber_rounded,
-            color: Colors.orange, size: 48),
-        title: const Text('¡Activo duplicado!',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.orange)),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.orange.shade50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.orange.shade200),
-            ),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(cve,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 15)),
-              const SizedBox(height: 4),
-              Text(desc, style: const TextStyle(fontSize: 13)),
-            ]),
-          ),
-          const SizedBox(height: 12),
-          Text('Ya fue registrado en:',
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
-          const SizedBox(height: 4),
-          Text(localizacionPrevia,
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold, color: Color(0xFF1B4F8A))),
-          Text(fechaStr,
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-          const SizedBox(height: 12),
-          const Text('¿Deseas registrarlo de nuevo?',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.w500)),
-        ]),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancelar',
-                  style: TextStyle(color: Colors.grey))),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange, foregroundColor: Colors.white),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Registrar de nuevo'),
-          ),
-        ],
-      ),
-    );
-    return result ?? false;
   }
 
   // ── Verificar ─────────────────────────────────────────────────────
@@ -257,13 +193,12 @@ class _InventarioScreenState extends State<InventarioScreen> {
       ));
       return;
     }
-    Navigator.push(context,
-        MaterialPageRoute(
-          builder: (_) => VerificacionScreen(
-            localizacion: _cveLocalizacion!,
-            registros: _registros,
-          ),
-        ));
+    Navigator.push(context, MaterialPageRoute(
+      builder: (_) => VerificacionScreen(
+        localizacion: _cveLocalizacion!,
+        registros:    _registros,
+      ),
+    ));
   }
 
   // ── Escáner ───────────────────────────────────────────────────────
@@ -274,12 +209,12 @@ class _InventarioScreenState extends State<InventarioScreen> {
       return;
     }
     setState(() {
-      _escaneando       = true;
-      _ultimoCodigo     = '';
-      _ultimoCodigoNorm = '';
-      _ultimoDesc       = '';
-      _ultimoEsDuplicado = false;
-      _scannerCtrl = MobileScannerController(
+      _escaneando     = true;
+      _codigoMostrado = '';
+      _descMostrada   = '';
+      _esNuevo        = false;
+      _noEncontrado   = false;
+      _scannerCtrl    = MobileScannerController(
           detectionSpeed: DetectionSpeed.noDuplicates);
     });
   }
@@ -318,8 +253,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
         title: const Text('Confirmar'),
         content: const Text('¿Borrar todo el archivo de inventario?'),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
+          TextButton(onPressed: () => Navigator.pop(context, false),
               child: const Text('Cancelar')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
@@ -352,7 +286,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
         SnackBar(content: Text(msg), backgroundColor: Colors.red.shade700));
   }
 
-  // ── Build principal ───────────────────────────────────────────────
+  // ── Build ─────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -360,21 +294,15 @@ class _InventarioScreenState extends State<InventarioScreen> {
       appBar: AppBar(
         title: const Text('Inventario CENAM'),
         actions: [
-          IconButton(
-              icon: const Icon(Icons.share),
-              tooltip: 'Compartir',
+          IconButton(icon: const Icon(Icons.share), tooltip: 'Compartir',
               onPressed: _registros.isEmpty ? null : _compartirArchivo),
-          IconButton(
-              icon: const Icon(Icons.delete_outline),
-              tooltip: 'Borrar',
+          IconButton(icon: const Icon(Icons.delete_outline), tooltip: 'Borrar',
               onPressed: _registros.isEmpty ? null : _borrarArchivo),
         ],
       ),
       body: _cargando
           ? const Center(child: CircularProgressIndicator())
-          : _escaneando
-              ? _buildEscaner()
-              : _buildPrincipal(),
+          : _escaneando ? _buildEscaner() : _buildPrincipal(),
     );
   }
 
@@ -400,8 +328,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
               controller: _locCtrl,
               textCapitalization: TextCapitalization.characters,
               decoration: const InputDecoration(
-                isDense: true,
-                hintText: 'Clave o nombre...',
+                isDense: true, hintText: 'Clave o nombre...',
                 border: OutlineInputBorder(),
                 contentPadding:
                     EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -421,10 +348,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
           Padding(
             padding: const EdgeInsets.only(top: 4, left: 36),
             child: Text(_descLocalizacion,
-                style: TextStyle(
-                    color: Colors.blue.shade800,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500)),
+                style: TextStyle(color: Colors.blue.shade800,
+                    fontSize: 13, fontWeight: FontWeight.w500)),
           ),
         if (_mostrarSugerencias && _sugerencias.isNotEmpty)
           _buildDropdownSugerencias(),
@@ -440,12 +365,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
         color: Colors.white,
         border: Border.all(color: Colors.grey.shade300),
         borderRadius: BorderRadius.circular(6),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 6,
-              offset: const Offset(0, 2))
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08),
+            blurRadius: 6, offset: const Offset(0, 2))],
       ),
       child: ListView.builder(
         shrinkWrap: true,
@@ -456,22 +377,16 @@ class _InventarioScreenState extends State<InventarioScreen> {
           return InkWell(
             onTap: () => _seleccionarLocalizacion(clave),
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: RichText(
-                text: TextSpan(
-                  style:
-                      const TextStyle(color: Colors.black87, fontSize: 13),
-                  children: [
-                    TextSpan(
-                        text: clave,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1B4F8A))),
-                    TextSpan(text: '  $desc'),
-                  ],
-                ),
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: RichText(text: TextSpan(
+                style: const TextStyle(color: Colors.black87, fontSize: 13),
+                children: [
+                  TextSpan(text: clave,
+                      style: const TextStyle(fontWeight: FontWeight.bold,
+                          color: Color(0xFF1B4F8A))),
+                  TextSpan(text: '  $desc'),
+                ],
+              )),
             ),
           );
         },
@@ -504,38 +419,29 @@ class _InventarioScreenState extends State<InventarioScreen> {
           tileColor: esDup ? Colors.orange.shade50 : null,
           leading: CircleAvatar(
             radius: 16,
-            backgroundColor:
-                esDup ? Colors.orange : const Color(0xFF1B4F8A),
+            backgroundColor: esDup ? Colors.orange : const Color(0xFF1B4F8A),
             child: Text('${_registros.length - i}',
                 style: const TextStyle(color: Colors.white, fontSize: 11)),
           ),
           title: Row(children: [
             Text(r.cveActivo,
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 14)),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             if (esDup) ...[
               const SizedBox(width: 6),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                    color: Colors.orange,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(color: Colors.orange,
                     borderRadius: BorderRadius.circular(10)),
-                child: Text('×$veces',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold)),
+                child: Text('×$veces', style: const TextStyle(
+                    color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
             ],
           ]),
           subtitle: Text(desc.isNotEmpty ? desc : r.localizacion,
               style: const TextStyle(fontSize: 12)),
           trailing: Text(r.localizacion,
-              style: TextStyle(
-                  color: Colors.blue.shade700,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500)),
+              style: TextStyle(color: Colors.blue.shade700,
+                  fontSize: 11, fontWeight: FontWeight.w500)),
         );
       },
     );
@@ -551,8 +457,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
       if (teo.isNotEmpty) {
         total = teo.length;
         final escSet = _registros
-            .where((r) =>
-                r.localizacion.toUpperCase() == _cveLocalizacion)
+            .where((r) => r.localizacion.toUpperCase() == _cveLocalizacion)
             .map((r) => r.cveActivo.toUpperCase())
             .toSet();
         escaneadosEnLoc = teo
@@ -569,43 +474,35 @@ class _InventarioScreenState extends State<InventarioScreen> {
       child: Column(children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Text('Registros: ${_registros.length}',
-              style: TextStyle(
-                  color: Colors.blue.shade800,
+              style: TextStyle(color: Colors.blue.shade800,
                   fontWeight: FontWeight.bold)),
           if (total != null)
             Text('$escaneadosEnLoc / $total en ubicación',
                 style: TextStyle(
                     color: escaneadosEnLoc == total
-                        ? Colors.green.shade700
-                        : Colors.orange.shade700,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13)),
+                        ? Colors.green.shade700 : Colors.orange.shade700,
+                    fontWeight: FontWeight.bold, fontSize: 13)),
         ]),
         const SizedBox(height: 8),
         Row(children: [
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: _abrirEscaner,
-              icon: const Icon(Icons.qr_code_scanner),
-              label: const Text('Escanear'),
-            ),
-          ),
+          Expanded(child: ElevatedButton.icon(
+            onPressed: _abrirEscaner,
+            icon: const Icon(Icons.qr_code_scanner),
+            label: const Text('Escanear'),
+          )),
           const SizedBox(width: 8),
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: _registrarManual,
-              icon: const Icon(Icons.edit),
-              label: const Text('Manual'),
-            ),
-          ),
+          Expanded(child: ElevatedButton.icon(
+            onPressed: _registrarManual,
+            icon: const Icon(Icons.edit),
+            label: const Text('Manual'),
+          )),
           const SizedBox(width: 8),
           ElevatedButton.icon(
             onPressed: _verificarUbicacion,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.teal.shade700,
               foregroundColor: Colors.white,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
             ),
             icon: const Icon(Icons.fact_check_outlined),
             label: const Text('Verificar'),
@@ -615,51 +512,38 @@ class _InventarioScreenState extends State<InventarioScreen> {
     );
   }
 
-  // ── Vista escáner con recuadro ────────────────────────────────────
+  // ── Vista escáner ─────────────────────────────────────────────────
 
   Widget _buildEscaner() {
     return Stack(children: [
-
-      // Cámara a pantalla completa
       MobileScanner(controller: _scannerCtrl!, onDetect: _onDetected),
-
-      // Oscurecimiento alrededor del recuadro
       _buildOverlayConRecuadro(),
 
-      // Info superior: localización y contador
+      // Info superior
       Positioned(
         top: 0, left: 0, right: 0,
         child: Container(
           color: Colors.black.withOpacity(0.65),
-          padding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('Loc: $_cveLocalizacion',
-                style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             Text(_descLocalizacion,
-                style: const TextStyle(
-                    color: Colors.white70, fontSize: 12)),
+                style: const TextStyle(color: Colors.white70, fontSize: 12)),
             Text('Registros: ${_registros.length}',
-                style: const TextStyle(
-                    color: Colors.white70, fontSize: 12)),
+                style: const TextStyle(color: Colors.white70, fontSize: 12)),
           ]),
         ),
       ),
 
-      // Panel inferior: último código detectado
+      // Panel inferior
       Positioned(
         bottom: 0, left: 0, right: 0,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          // Resultado del último escaneo
-          if (_ultimoCodigo.isNotEmpty) _buildUltimoEscaneo(),
-          // Botón detener
+          if (_codigoMostrado.isNotEmpty) _buildPanelUltimoEscaneo(),
           Container(
             color: Colors.black.withOpacity(0.65),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -678,51 +562,41 @@ class _InventarioScreenState extends State<InventarioScreen> {
     ]);
   }
 
-  /// Capa oscura con recuadro transparente en el centro
   Widget _buildOverlayConRecuadro() {
     return LayoutBuilder(builder: (context, constraints) {
       final w = constraints.maxWidth;
       final h = constraints.maxHeight;
       const recuadroW = 260.0;
       const recuadroH = 160.0;
-      final left   = (w - recuadroW) / 2;
-      final top    = (h - recuadroH) / 2 - 30; // Ligeramente arriba del centro
+      final left = (w - recuadroW) / 2;
+      final top  = (h - recuadroH) / 2 - 30;
+
+      // Color del borde según estado
+      final borderColor = _codigoMostrado.isEmpty
+          ? Colors.white
+          : _noEncontrado
+              ? Colors.red
+              : _esNuevo          // duplicado → naranja
+                  ? Colors.orange
+                  : Colors.green;
 
       return Stack(children: [
-        // Oscurecimiento total
-        Positioned.fill(
-          child: Container(color: Colors.black.withOpacity(0.45)),
-        ),
-        // Recuadro transparente (agujero)
+        Positioned.fill(child: Container(color: Colors.black.withOpacity(0.45))),
         Positioned(
-          left: left, top: top,
-          width: recuadroW, height: recuadroH,
+          left: left, top: top, width: recuadroW, height: recuadroH,
           child: Container(
             decoration: BoxDecoration(
               color: Colors.transparent,
-              border: Border.all(
-                color: _ultimoCodigo.isEmpty
-                    ? Colors.white
-                    : _ultimoDesc.contains('No encontrado')
-                        ? Colors.red
-                        : _ultimoEsDuplicado
-                            ? Colors.orange
-                            : Colors.green,
-                width: 2.5,
-              ),
+              border: Border.all(color: borderColor, width: 2.5),
               borderRadius: BorderRadius.circular(8),
             ),
           ),
         ),
-        // Esquinas decorativas del recuadro
-        ..._buildEsquinas(left, top, recuadroW, recuadroH),
-        // Etiqueta "Apunta aquí"
+        ..._buildEsquinas(left, top, recuadroW, recuadroH, borderColor),
         Positioned(
-          left: left,
-          top: top + recuadroH + 8,
-          width: recuadroW,
+          left: left, top: top + recuadroH + 8, width: recuadroW,
           child: Text(
-            _ultimoCodigo.isEmpty ? 'Apunta el código al recuadro' : '',
+            _codigoMostrado.isEmpty ? 'Apunta el código al recuadro' : '',
             textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
@@ -732,53 +606,36 @@ class _InventarioScreenState extends State<InventarioScreen> {
   }
 
   List<Widget> _buildEsquinas(
-      double left, double top, double w, double h) {
-    const len   = 20.0;
-    const thick = 3.5;
-    final color = Colors.white;
-
-    Widget corner(double l, double t, bool izqDer, bool arrAbajo) {
-      return Positioned(
-        left: l, top: t,
-        child: SizedBox(
-          width: len, height: len,
-          child: CustomPaint(
-            painter: _CornerPainter(
-                color: color,
-                thickness: thick,
-                izquierda: izqDer,
-                arriba: arrAbajo),
-          ),
-        ),
-      );
-    }
-
+      double left, double top, double w, double h, Color color) {
+    const len = 20.0, thick = 3.5;
+    Widget corner(double l, double t, bool izq, bool arr) => Positioned(
+      left: l, top: t,
+      child: SizedBox(width: len, height: len,
+          child: CustomPaint(painter: _CornerPainter(
+              color: color, thickness: thick,
+              izquierda: izq, arriba: arr))),
+    );
     return [
-      corner(left,           top,           true,  true),   // sup-izq
-      corner(left + w - len, top,           false, true),   // sup-der
-      corner(left,           top + h - len, true,  false),  // inf-izq
-      corner(left + w - len, top + h - len, false, false),  // inf-der
+      corner(left,           top,           true,  true),
+      corner(left + w - len, top,           false, true),
+      corner(left,           top + h - len, true,  false),
+      corner(left + w - len, top + h - len, false, false),
     ];
   }
 
-  /// Panel con info del último código escaneado
-  Widget _buildUltimoEscaneo() {
-    final noEncontrado = _ultimoDesc.contains('No encontrado');
-    final color = noEncontrado
-        ? Colors.red.shade700
-        : _ultimoEsDuplicado
-            ? Colors.orange.shade700
-            : Colors.green.shade800;
-    final bgColor = noEncontrado
+  /// Panel inferior del escáner — muestra el código TAL COMO SE ESCANEÓ
+  Widget _buildPanelUltimoEscaneo() {
+    final bgColor = _noEncontrado
         ? Colors.red.shade900
-        : _ultimoEsDuplicado
+        : _esNuevo
             ? Colors.orange.shade900
             : Colors.green.shade900;
-    final icono = noEncontrado
+    final icono = _noEncontrado
         ? Icons.error_outline
-        : _ultimoEsDuplicado
+        : _esNuevo
             ? Icons.warning_amber_outlined
             : Icons.check_circle_outline;
+    final etiqueta = _esNuevo ? '⚠ Activo ya registrado' : null;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -786,59 +643,34 @@ class _InventarioScreenState extends State<InventarioScreen> {
       decoration: BoxDecoration(
         color: bgColor.withOpacity(0.92),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.6)),
       ),
       child: Row(children: [
         Icon(icono, color: Colors.white70, size: 22),
         const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-            // Código raw y normalizado
-            Row(children: [
-              Text(_ultimoCodigoNorm,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15)),
-              if (_ultimoCodigo != _ultimoCodigoNorm) ...[
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 6, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    'ant: $_ultimoCodigo',
-                    style: const TextStyle(
-                        color: Colors.white70, fontSize: 10),
-                  ),
-                ),
-              ],
-            ]),
-            const SizedBox(height: 2),
-            Text(_ultimoDesc,
+        Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Código exacto escaneado — sin transformar
+          Text(
+            _codigoMostrado,
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          const SizedBox(height: 2),
+          Text(_descMostrada,
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+              maxLines: 2, overflow: TextOverflow.ellipsis),
+          if (etiqueta != null)
+            Text(etiqueta,
                 style: const TextStyle(
-                    color: Colors.white70, fontSize: 12),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis),
-            if (_ultimoEsDuplicado)
-              const Text('⚠ Ya registrado anteriormente',
-                  style: TextStyle(
-                      color: Colors.orangeAccent,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500)),
-          ]),
-        ),
+                    color: Colors.orangeAccent, fontSize: 11,
+                    fontWeight: FontWeight.w500)),
+        ])),
       ]),
     );
   }
 }
 
-// ── Painter para esquinas del recuadro ────────────────────────────
+// ── Painter esquinas ──────────────────────────────────────────────
 
 class _CornerPainter extends CustomPainter {
   final Color color;
@@ -847,25 +679,19 @@ class _CornerPainter extends CustomPainter {
   final bool arriba;
 
   const _CornerPainter({
-    required this.color,
-    required this.thickness,
-    required this.izquierda,
-    required this.arriba,
+    required this.color, required this.thickness,
+    required this.izquierda, required this.arriba,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = color
-      ..strokeWidth = thickness
-      ..strokeCap = StrokeCap.square
-      ..style = PaintingStyle.stroke;
-
-    final x = izquierda ? 0.0 : size.width;
-    final y = arriba    ? 0.0 : size.height;
+      ..color = color ..strokeWidth = thickness
+      ..strokeCap = StrokeCap.square ..style = PaintingStyle.stroke;
+    final x  = izquierda ? 0.0 : size.width;
+    final y  = arriba    ? 0.0 : size.height;
     final dx = izquierda ? size.width  : -size.width;
     final dy = arriba    ? size.height : -size.height;
-
     canvas.drawLine(Offset(x, y), Offset(x + dx, y), paint);
     canvas.drawLine(Offset(x, y), Offset(x, y + dy), paint);
   }
