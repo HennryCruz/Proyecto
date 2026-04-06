@@ -9,6 +9,7 @@ import '../services/teorico_service.dart';
 import '../widgets/manual_entry_dialog.dart';
 import 'verificacion_screen.dart';
 import 'checklist_screen.dart';
+import 'dashboard_screen.dart';
 
 class InventarioScreen extends StatefulWidget {
   const InventarioScreen({super.key});
@@ -323,6 +324,14 @@ class _InventarioScreenState extends State<InventarioScreen> {
       appBar: AppBar(
         title: const Text('Inventario CENAM'),
         actions: [
+          // Dashboard de progreso
+          IconButton(
+            icon: const Icon(Icons.bar_chart),
+            tooltip: 'Dashboard de progreso',
+            onPressed: () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => DashboardScreen(registros: _registros),
+            )).then((_) => setState(() {})),
+          ),
           // Botón checklist por empleado
           IconButton(
             icon: const Icon(Icons.person_search),
