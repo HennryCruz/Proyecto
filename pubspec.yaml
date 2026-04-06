@@ -2,7 +2,6 @@ name: inventario_cenam
 description: Sistema de Inventario CENAM - Escaneo de activos con cámara
 
 publish_to: 'none'
-
 version: 1.0.0+1
 
 environment:
@@ -26,3 +25,4 @@ flutter:
   assets:
     - assets/localizaciones.txt
     - assets/activos.txt
+    - assets/activos_teorico.csv
