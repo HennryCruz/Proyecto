@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-
 import '../models/activo_teorico.dart';
 import '../services/inventario_service.dart';
 import '../services/teorico_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   final List<RegistroInventario> registros;
-
   const DashboardScreen({super.key, required this.registros});
 
   @override
@@ -18,16 +16,14 @@ class _DashboardScreenState extends State<DashboardScreen>
   final _teorico = TeoricoService();
   late TabController _tabCtrl;
 
-  // Vista activa del desglose
-  _Vista _vistaActual = _Vista.localizacion;
   String _busqueda = '';
-  final _busCtrl = TextEditingController();
+  final _busCtrl   = TextEditingController();
 
-  // Datos calculados
   int _totalTeorico    = 0;
   int _totalEscaneados = 0;
-  Map<String, _ProgresoDato> _porLocalizacion = {};
-  Map<String, _ProgresoDato> _porEmpleado     = {};
+
+  Map<String, _Dato> _porLoc      = {};
+  Map<String, _Dato> _porEmpleado = {};
 
   @override
   void initState() {
@@ -36,65 +32,75 @@ class _DashboardScreenState extends State<DashboardScreen>
     _calcular();
   }
 
-  void _calcular() {
-    final todos = _teorico.total;
-    _totalTeorico = todos;
+  // ── Edificio de una clave ─────────────────────────────────────────
 
-    // Set de códigos escaneados
+  static String _edificioDe(String clave) {
+    final c = clave.toUpperCase().trim();
+    if (c.startsWith('EXT.') && c.length > 4) return c[4];
+    if (c.startsWith('QS'))   return 'Q';
+    if (c.startsWith('GP'))   return 'G';
+    if (RegExp(r'^L[ABOPZ]\d').hasMatch(c)) return 'L';
+    if (['LTRAN','LUPS','LIDF','LCOM'].contains(c)) return 'L';
+    if (c.startsWith('MENA')) return 'M';
+    if (['PLAZA','VARI','VARIA','VARIO','VEST','VESTI',
+         'S000','PD','BORRA','FUERA'].contains(c)) return 'VARIOS';
+    final m = RegExp(r'^([A-Z])').firstMatch(c);
+    return m != null ? m.group(1)! : 'OTROS';
+  }
+
+  static String _nombreEdificio(String letra) {
+    const nombres = {
+      'A':'Edificio A','B':'Edificio B','C':'Edificio C',
+      'D':'Edificio D','E':'Edificio E','F':'Edificio F',
+      'G':'Edificio G','H':'Edificio H','I':'Edificio I',
+      'J':'Edificio J','K':'Edificio K','L':'Edificio L',
+      'M':'Edificio M','N':'Edificio N','O':'Edificio O',
+      'P':'Edificio P','Q':'Edificio Q','R':'Edificio R',
+      'T':'Edificio T','U':'Edificio U','Z':'Áreas Exteriores',
+      'VARIOS':'Varios / Generales',
+    };
+    return nombres[letra] ?? 'Edificio $letra';
+  }
+
+  // ── Cálculo ───────────────────────────────────────────────────────
+
+  void _calcular() {
     final escSet = widget.registros
         .map((r) => r.cveActivo.toUpperCase())
         .toSet();
 
-    // Contar escaneados únicos que están en el teórico
     int escaneados = 0;
+    final porLoc = <String, _Dato>{};
+    final porEmp = <String, _Dato>{};
 
-    // Por localización
-    final porLoc = <String, _ProgresoDato>{};
-    // Por empleado
-    final porEmp = <String, _ProgresoDato>{};
-
-    for (final activo in _iterar()) {
-      final loc  = activo.localizacion;
-      final emp  = activo.nombre.trim();
-
-      final escaneado =
-          escSet.contains(activo.codigoNuevo.toUpperCase()) ||
-          (activo.codigoAnterior.isNotEmpty &&
-              escSet.contains(activo.codigoAnterior));
-
-      if (escaneado) escaneados++;
-
-      // Localización
-      porLoc.putIfAbsent(loc, () => _ProgresoDato(loc,
-          _teorico.activosDe(loc).length > 0
-              ? _teorico.activosDe(loc).first.ubicaDesc
-              : ''));
-      if (escaneado) porLoc[loc]!.escaneados++;
-
-      // Empleado
-      if (emp.isNotEmpty && emp != 'Almacen') {
-        porEmp.putIfAbsent(emp, () => _ProgresoDato(emp, ''));
-        porEmp[emp]!.total++;
-        if (escaneado) porEmp[emp]!.escaneados++;
-      }
-    }
-
-    // Fijar totales de localización desde el teórico
-    for (final key in porLoc.keys) {
-      porLoc[key]!.total = _teorico.activosDe(key).length;
-    }
-
-    _totalEscaneados  = escaneados;
-    _porLocalizacion  = porLoc;
-    _porEmpleado      = porEmp;
-  }
-
-  Iterable<ActivoTeorico> _iterar() sync* {
     for (final loc in _teorico.localizaciones) {
-      for (final a in _teorico.activosDe(loc)) {
-        yield a;
+      final activos = _teorico.activosDe(loc);
+      if (activos.isEmpty) continue;
+
+      porLoc[loc] = _Dato(loc, activos.first.ubicaDesc, activos.length, 0);
+
+      for (final a in activos) {
+        final esc = escSet.contains(a.codigoNuevo.toUpperCase()) ||
+            (a.codigoAnterior.isNotEmpty &&
+                escSet.contains(a.codigoAnterior));
+        if (esc) {
+          escaneados++;
+          porLoc[loc]!.escaneados++;
+        }
+
+        final emp = a.nombre.trim();
+        if (emp.isNotEmpty && emp != 'Almacen') {
+          porEmp.putIfAbsent(emp, () => _Dato(emp, '', 0, 0));
+          porEmp[emp]!.total++;
+          if (esc) porEmp[emp]!.escaneados++;
+        }
       }
     }
+
+    _totalTeorico    = _teorico.total;
+    _totalEscaneados = escaneados;
+    _porLoc          = porLoc;
+    _porEmpleado     = porEmp;
   }
 
   @override
@@ -108,9 +114,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   @override
   Widget build(BuildContext context) {
-    final pct = _totalTeorico > 0
-        ? _totalEscaneados / _totalTeorico
-        : 0.0;
+    final pct = _totalTeorico > 0 ? _totalEscaneados / _totalTeorico : 0.0;
 
     return Scaffold(
       appBar: AppBar(
@@ -120,29 +124,26 @@ class _DashboardScreenState extends State<DashboardScreen>
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
           indicatorColor: Colors.white,
-          onTap: (i) => setState(() =>
-              _vistaActual = i == 0 ? _Vista.localizacion : _Vista.empleado),
+          onTap: (_) => setState(() {
+            _busqueda = '';
+            _busCtrl.clear();
+          }),
           tabs: const [
-            Tab(icon: Icon(Icons.location_on_outlined), text: 'Por ubicación'),
-            Tab(icon: Icon(Icons.person_outline),       text: 'Por empleado'),
+            Tab(icon: Icon(Icons.location_on_outlined), text: 'Ubicaciones'),
+            Tab(icon: Icon(Icons.person_outline),       text: 'Empleados'),
           ],
         ),
       ),
       body: Column(children: [
-        // ── Resumen global ──────────────────────────────────────────
         _buildResumenGlobal(pct),
-        // ── Buscador ───────────────────────────────────────────────
         _buildBuscador(),
-        // ── Lista ──────────────────────────────────────────────────
-        Expanded(
-          child: TabBarView(
-            controller: _tabCtrl,
-            children: [
-              _buildListaLocalizaciones(),
-              _buildListaEmpleados(),
-            ],
-          ),
-        ),
+        Expanded(child: TabBarView(
+          controller: _tabCtrl,
+          children: [
+            _buildTabUbicaciones(),
+            _buildTabEmpleados(),
+          ],
+        )),
       ]),
     );
   }
@@ -151,35 +152,30 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Widget _buildResumenGlobal(double pct) {
     final faltan = _totalTeorico - _totalEscaneados;
-
     return Container(
       color: const Color(0xFF1B4F8A),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       child: Column(children: [
-        // Tarjetas de stats
         Row(children: [
-          _statCard('Total\nactivos',    '$_totalTeorico',    Colors.white,
+          _statCard('Total\nactivos',  '$_totalTeorico',    Colors.white,
               Colors.white.withOpacity(0.15)),
           const SizedBox(width: 8),
-          _statCard('Escaneados',        '$_totalEscaneados', Colors.green.shade300,
+          _statCard('Escaneados', '$_totalEscaneados', Colors.green.shade300,
               Colors.green.withOpacity(0.15)),
           const SizedBox(width: 8),
-          _statCard('Pendientes',        '$faltan',
+          _statCard('Pendientes', '$faltan',
               faltan == 0 ? Colors.green.shade300 : Colors.orange.shade300,
               Colors.orange.withOpacity(0.12)),
           const SizedBox(width: 8),
           _statCard('Progreso',
               '${(pct * 100).toStringAsFixed(1)}%',
-              Colors.white,
-              Colors.white.withOpacity(0.12)),
+              Colors.white, Colors.white.withOpacity(0.12)),
         ]),
         const SizedBox(height: 10),
-        // Barra global
         ClipRRect(
           borderRadius: BorderRadius.circular(6),
           child: LinearProgressIndicator(
-            value: pct,
-            minHeight: 12,
+            value: pct, minHeight: 12,
             backgroundColor: Colors.white.withOpacity(0.2),
             valueColor: AlwaysStoppedAnimation(
                 pct >= 1.0 ? Colors.green.shade400 : Colors.white),
@@ -189,17 +185,15 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  Widget _statCard(String label, String value, Color valueColor, Color bg) {
+  Widget _statCard(String label, String value, Color vc, Color bg) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
         decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(8),
-        ),
+            color: bg, borderRadius: BorderRadius.circular(8)),
         child: Column(children: [
           Text(value, style: TextStyle(
-              color: valueColor, fontWeight: FontWeight.bold, fontSize: 18)),
+              color: vc, fontWeight: FontWeight.bold, fontSize: 18)),
           const SizedBox(height: 2),
           Text(label, textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white70, fontSize: 10)),
@@ -211,13 +205,15 @@ class _DashboardScreenState extends State<DashboardScreen>
   // ── Buscador ──────────────────────────────────────────────────────
 
   Widget _buildBuscador() {
+    final hint = _tabCtrl.index == 0
+        ? 'Buscar por clave, nombre o edificio...'
+        : 'Buscar empleado...';
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
       child: TextField(
         controller: _busCtrl,
         decoration: InputDecoration(
-          hintText: _vistaActual == _Vista.localizacion
-              ? 'Buscar ubicación...' : 'Buscar empleado...',
+          hintText: hint,
           prefixIcon: const Icon(Icons.search),
           isDense: true,
           border: const OutlineInputBorder(),
@@ -237,25 +233,26 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ── Lista por localización ────────────────────────────────────────
+  // ── Tab Ubicaciones ───────────────────────────────────────────────
 
-  Widget _buildListaLocalizaciones() {
-    var items = _porLocalizacion.values.toList();
+  Widget _buildTabUbicaciones() {
+    var items = _porLoc.values.toList();
 
-    // Filtrar
     if (_busqueda.isNotEmpty) {
       final q = _busqueda.toUpperCase();
       items = items.where((d) =>
-          d.clave.contains(q) || d.desc.toUpperCase().contains(q)).toList();
+          d.clave.contains(q) ||
+          d.desc.toUpperCase().contains(q) ||
+          // Buscar también por nombre o letra de edificio
+          _edificioDe(d.clave).contains(q) ||
+          _nombreEdificio(_edificioDe(d.clave)).toUpperCase().contains(q),
+      ).toList();
     }
 
-    // Ordenar: primero las incompletas, luego por porcentaje asc
     items.sort((a, b) {
-      final pA = a.total > 0 ? a.escaneados / a.total : 0.0;
-      final pB = b.total > 0 ? b.escaneados / b.total : 0.0;
-      if (pA == 1.0 && pB < 1.0) return 1;
-      if (pB == 1.0 && pA < 1.0) return -1;
-      return pA.compareTo(pB);
+      if (a.pct == 1.0 && b.pct < 1.0) return 1;
+      if (b.pct == 1.0 && a.pct < 1.0) return -1;
+      return a.pct.compareTo(b.pct);
     });
 
     if (items.isEmpty) {
@@ -263,15 +260,32 @@ class _DashboardScreenState extends State<DashboardScreen>
           style: TextStyle(color: Colors.grey)));
     }
 
-    return ListView.builder(
-      itemCount: items.length,
-      itemBuilder: (_, i) => _filaDato(items[i]),
-    );
+    // Cabecera con total filtrado
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text('${items.length} ubicaciones',
+              style: const TextStyle(color: Colors.black45, fontSize: 12)),
+          Text(
+            '${items.where((d) => d.pct >= 1.0).length} completas',
+            style: TextStyle(color: Colors.green.shade600, fontSize: 12,
+                fontWeight: FontWeight.w500),
+          ),
+        ]),
+      ),
+      Expanded(
+        child: ListView.builder(
+          itemCount: items.length,
+          itemBuilder: (_, i) => _filaDato(items[i], mostrarEdificio: true),
+        ),
+      ),
+    ]);
   }
 
-  // ── Lista por empleado ────────────────────────────────────────────
+  // ── Tab Empleados ─────────────────────────────────────────────────
 
-  Widget _buildListaEmpleados() {
+  Widget _buildTabEmpleados() {
     var items = _porEmpleado.values.toList();
 
     if (_busqueda.isNotEmpty) {
@@ -280,11 +294,9 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
 
     items.sort((a, b) {
-      final pA = a.total > 0 ? a.escaneados / a.total : 0.0;
-      final pB = b.total > 0 ? b.escaneados / b.total : 0.0;
-      if (pA == 1.0 && pB < 1.0) return 1;
-      if (pB == 1.0 && pA < 1.0) return -1;
-      return pA.compareTo(pB);
+      if (a.pct == 1.0 && b.pct < 1.0) return 1;
+      if (b.pct == 1.0 && a.pct < 1.0) return -1;
+      return a.pct.compareTo(b.pct);
     });
 
     if (items.isEmpty) {
@@ -292,22 +304,36 @@ class _DashboardScreenState extends State<DashboardScreen>
           style: TextStyle(color: Colors.grey)));
     }
 
-    return ListView.builder(
-      itemCount: items.length,
-      itemBuilder: (_, i) => _filaDato(items[i], esEmpleado: true),
-    );
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text('${items.length} empleados',
+              style: const TextStyle(color: Colors.black45, fontSize: 12)),
+          Text(
+            '${items.where((d) => d.pct >= 1.0).length} completos',
+            style: TextStyle(color: Colors.green.shade600, fontSize: 12,
+                fontWeight: FontWeight.w500),
+          ),
+        ]),
+      ),
+      Expanded(
+        child: ListView.builder(
+          itemCount: items.length,
+          itemBuilder: (_, i) => _filaDato(items[i], esEmpleado: true),
+        ),
+      ),
+    ]);
   }
 
-  // ── Fila de progreso individual ───────────────────────────────────
+  // ── Fila genérica ─────────────────────────────────────────────────
 
-  Widget _filaDato(_ProgresoDato d, {bool esEmpleado = false}) {
-    final pct     = d.total > 0 ? d.escaneados / d.total : 0.0;
-    final completo = pct >= 1.0;
-    final color    = completo
-        ? Colors.green.shade600
-        : pct > 0.5
-            ? Colors.orange.shade600
-            : Colors.red.shade600;
+  Widget _filaDato(_Dato d,
+      {bool esEmpleado = false, bool mostrarEdificio = false}) {
+    final completo = d.pct >= 1.0;
+    final color    = completo ? Colors.green.shade600
+        : d.pct > 0.5 ? Colors.orange.shade600
+        : Colors.red.shade600;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
@@ -316,13 +342,10 @@ class _DashboardScreenState extends State<DashboardScreen>
         color: completo ? Colors.green.shade50 : Colors.white,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-            color: completo
-                ? Colors.green.shade200
-                : Colors.grey.shade200),
+            color: completo ? Colors.green.shade200 : Colors.grey.shade200),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          // Icono
           Icon(
             esEmpleado
                 ? (completo ? Icons.person : Icons.person_outline)
@@ -330,45 +353,56 @@ class _DashboardScreenState extends State<DashboardScreen>
             color: color, size: 18,
           ),
           const SizedBox(width: 8),
-          // Clave / nombre
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(d.clave,
-                  style: TextStyle(fontWeight: FontWeight.bold,
-                      fontSize: 13, color: color)),
-              if (d.desc.isNotEmpty)
-                Text(d.desc,
-                    style: const TextStyle(fontSize: 11, color: Colors.black54),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
+          Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Text(d.clave, style: TextStyle(
+                  fontWeight: FontWeight.bold, fontSize: 13, color: color)),
+              // Etiqueta de edificio en ubicaciones
+              if (mostrarEdificio) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    _nombreEdificio(_edificioDe(d.clave)),
+                    style: TextStyle(fontSize: 10, color: color),
+                  ),
+                ),
+              ],
             ]),
-          ),
-          // Contador
+            if (d.desc.isNotEmpty)
+              Text(d.desc,
+                  style: const TextStyle(fontSize: 11, color: Colors.black54),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+          ])),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text('${d.escaneados}/${d.total}',
                 style: TextStyle(fontWeight: FontWeight.bold,
                     fontSize: 13, color: color)),
-            Text('${(pct * 100).toStringAsFixed(0)}%',
+            Text('${(d.pct * 100).toStringAsFixed(0)}%',
                 style: TextStyle(fontSize: 11, color: color)),
           ]),
         ]),
         const SizedBox(height: 6),
-        // Barra de progreso individual
         ClipRRect(
           borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
-            value: pct,
-            minHeight: 6,
+            value: d.pct, minHeight: 6,
             backgroundColor: Colors.grey.shade200,
             valueColor: AlwaysStoppedAnimation(color),
           ),
         ),
-        // Indicador visual de faltantes
         if (!completo && d.total - d.escaneados <= 5) ...[
-          const SizedBox(height: 4),
+          const SizedBox(height: 3),
           Text(
-            'Faltan ${d.total - d.escaneados} activo${d.total - d.escaneados == 1 ? "" : "s"}',
-            style: TextStyle(
-                fontSize: 11,
+            'Faltan ${d.total - d.escaneados} '
+            'activo${d.total - d.escaneados == 1 ? "" : "s"}',
+            style: TextStyle(fontSize: 10,
                 color: Colors.orange.shade700,
                 fontWeight: FontWeight.w500),
           ),
@@ -378,15 +412,15 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 }
 
-// ── Modelos internos ──────────────────────────────────────────────
+// ── Modelo interno ────────────────────────────────────────────────
 
-enum _Vista { localizacion, empleado }
-
-class _ProgresoDato {
+class _Dato {
   final String clave;
   final String desc;
-  int total     = 0;
-  int escaneados = 0;
+  int total;
+  int escaneados;
 
-  _ProgresoDato(this.clave, this.desc);
+  _Dato(this.clave, this.desc, this.total, this.escaneados);
+
+  double get pct => total > 0 ? escaneados / total : 0.0;
 }
