@@ -15,20 +15,21 @@ class InventarioScreen extends StatefulWidget {
 }
 
 class _InventarioScreenState extends State<InventarioScreen> {
-  final _catalogo = CatalogoService();
+  final _catalogo  = CatalogoService();
   final _inventario = InventarioService();
 
   bool _cargando = true;
   List<RegistroInventario> _registros = [];
 
-  // Localización seleccionada
-  String? _cveLocalizacion;
-  String _descLocalizacion = '';
+  // Set de claves YA escaneadas en esta sesión (clave interna normalizada)
+  final Set<String> _escaneadosEnSesion = {};
 
-  // Controlador de autocomplete
-  final _locCtrl = TextEditingController();
-  List<String> _sugerencias = [];
-  bool _mostrarSugerencias = false;
+  // Localización
+  String? _cveLocalizacion;
+  String  _descLocalizacion = '';
+  final _locCtrl    = TextEditingController();
+  List<String> _sugerencias        = [];
+  bool         _mostrarSugerencias = false;
 
   // Scanner
   MobileScannerController? _scannerCtrl;
@@ -46,6 +47,10 @@ class _InventarioScreenState extends State<InventarioScreen> {
     if (mounted) {
       setState(() {
         _registros = regs;
+        // Poblar el set con todo lo que ya estaba en el archivo
+        for (final r in regs) {
+          _escaneadosEnSesion.add(r.cveActivo.toUpperCase());
+        }
         _cargando = false;
       });
     }
@@ -58,24 +63,23 @@ class _InventarioScreenState extends State<InventarioScreen> {
     super.dispose();
   }
 
-  // ── Localización ────────────────────────────────────────────────
+  // ── Localización ─────────────────────────────────────────────────
 
   void _onLocTextChanged(String val) {
     final sugs = _catalogo.buscarLocalizacion(val);
     setState(() {
-      _sugerencias = sugs.take(80).toList();
+      _sugerencias        = sugs.take(80).toList();
       _mostrarSugerencias = true;
     });
-    // Si la clave exacta existe, actualizar descripción
     final desc = _catalogo.descripcionLocalizacion(val.toUpperCase());
     if (desc.isNotEmpty) {
       setState(() {
-        _cveLocalizacion = val.toUpperCase();
+        _cveLocalizacion  = val.toUpperCase();
         _descLocalizacion = desc;
       });
     } else {
       setState(() {
-        _cveLocalizacion = null;
+        _cveLocalizacion  = null;
         _descLocalizacion = '';
       });
     }
@@ -83,36 +87,63 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   void _seleccionarLocalizacion(String clave) {
     setState(() {
-      _cveLocalizacion = clave;
+      _cveLocalizacion  = clave;
       _descLocalizacion = _catalogo.descripcionLocalizacion(clave);
-      _locCtrl.text = clave;
+      _locCtrl.text     = clave;
       _mostrarSugerencias = false;
     });
     FocusScope.of(context).unfocus();
   }
 
-  // ── Insertar activo ──────────────────────────────────────────────
+  // ── Insertar activo ───────────────────────────────────────────────
 
-  Future<void> _insertarActivo(String cveActivo) async {
+  Future<void> _insertarActivo(String codigoEscaneado) async {
     if (_cveLocalizacion == null || _cveLocalizacion!.isEmpty) {
       _mostrarError('Selecciona una localización primero');
       return;
     }
 
-    final cve = _catalogo.normalizarCveActivo(cveActivo);
-    final desc = _catalogo.descripcionActivo(cve);
+    final cve  = _catalogo.normalizarCveActivo(codigoEscaneado);
+    final desc = _catalogo.descripcionActivo(codigoEscaneado);
+
     if (desc.isEmpty) {
       _mostrarError('Activo no encontrado: $cve');
       return;
     }
 
+    // ── Verificar duplicado ───────────────────────────────────────
+    if (_escaneadosEnSesion.contains(cve.toUpperCase())) {
+      // Buscar en qué localización fue registrado antes
+      final regPrevio = _registros.lastWhere(
+        (r) => r.cveActivo.toUpperCase() == cve.toUpperCase(),
+        orElse: () => RegistroInventario(
+          localizacion: '?',
+          cveActivo: cve,
+          fecha: DateTime.now(),
+        ),
+      );
+
+      final continuar = await _mostrarAlertaDuplicado(
+        cve: cve,
+        desc: desc,
+        localizacionPrevia: regPrevio.localizacion,
+        fechaPrevia: regPrevio.fecha,
+      );
+
+      if (!continuar) return; // Usuario canceló
+    }
+
+    // Registrar
     final reg = RegistroInventario(
       localizacion: _cveLocalizacion!,
-      cveActivo: cve,
-      fecha: DateTime.now(),
+      cveActivo:    cve,
+      fecha:        DateTime.now(),
     );
     await _inventario.agregarRegistro(reg);
-    setState(() => _registros.add(reg));
+    setState(() {
+      _registros.add(reg);
+      _escaneadosEnSesion.add(cve.toUpperCase());
+    });
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -125,7 +156,97 @@ class _InventarioScreenState extends State<InventarioScreen> {
     }
   }
 
-  // ── Escáner ──────────────────────────────────────────────────────
+  // ── Alerta de duplicado ───────────────────────────────────────────
+
+  Future<bool> _mostrarAlertaDuplicado({
+    required String cve,
+    required String desc,
+    required String localizacionPrevia,
+    required DateTime fechaPrevia,
+  }) async {
+    final fechaStr = DateFormat('dd/MM/yyyy HH:mm').format(fechaPrevia);
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        icon: const Icon(Icons.warning_amber_rounded,
+            color: Colors.orange, size: 48),
+        title: const Text(
+          '¡Activo duplicado!',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.orange),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(cve,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 15)),
+                  const SizedBox(height: 4),
+                  Text(desc,
+                      style: const TextStyle(fontSize: 13)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Ya fue registrado en:',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              localizacionPrevia,
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1B4F8A)),
+            ),
+            Text(
+              fechaStr,
+              style: TextStyle(
+                  color: Colors.grey.shade600, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              '¿Deseas registrarlo de nuevo?',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar',
+                style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Registrar de nuevo'),
+          ),
+        ],
+      ),
+    );
+
+    return result ?? false;
+  }
+
+  // ── Escáner ───────────────────────────────────────────────────────
 
   void _abrirEscaner() {
     if (_cveLocalizacion == null) {
@@ -133,7 +254,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
       return;
     }
     setState(() {
-      _escaneando = true;
+      _escaneando  = true;
       _scannerCtrl = MobileScannerController(
         detectionSpeed: DetectionSpeed.noDuplicates,
       );
@@ -153,7 +274,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
     }
   }
 
-  // ── Registro manual ──────────────────────────────────────────────
+  // ── Registro manual ───────────────────────────────────────────────
 
   Future<void> _registrarManual() async {
     if (_cveLocalizacion == null) {
@@ -170,7 +291,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
     }
   }
 
-  // ── Borrar archivo ───────────────────────────────────────────────
+  // ── Borrar archivo ────────────────────────────────────────────────
 
   Future<void> _borrarArchivo() async {
     final confirm = await showDialog<bool>(
@@ -192,7 +313,10 @@ class _InventarioScreenState extends State<InventarioScreen> {
     );
     if (confirm == true) {
       await _inventario.borrarArchivo();
-      setState(() => _registros.clear());
+      setState(() {
+        _registros.clear();
+        _escaneadosEnSesion.clear();
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Archivo de inventario borrado')),
@@ -201,7 +325,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
     }
   }
 
-  // ── Compartir archivo ────────────────────────────────────────────
+  // ── Compartir archivo ─────────────────────────────────────────────
 
   Future<void> _compartirArchivo() async {
     final ruta = await _inventario.rutaArchivo;
@@ -213,11 +337,13 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   void _mostrarError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.red.shade700),
+      SnackBar(
+          content: Text(msg),
+          backgroundColor: Colors.red.shade700),
     );
   }
 
-  // ── Build ────────────────────────────────────────────────────────
+  // ── Build ─────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -248,11 +374,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
   Widget _buildPrincipal() {
     return Column(
       children: [
-        // Panel superior: localización + fecha
         _buildPanelLocalizacion(),
-        // Lista de registros
         Expanded(child: _buildLista()),
-        // Botones inferiores
         _buildBotones(),
       ],
     );
@@ -281,13 +404,10 @@ class _InventarioScreenState extends State<InventarioScreen> {
                         EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                   ),
                   onChanged: _onLocTextChanged,
-                  onTap: () {
-                    setState(() {
-                      _sugerencias =
-                          _catalogo.buscarLocalizacion(_locCtrl.text);
-                      _mostrarSugerencias = true;
-                    });
-                  },
+                  onTap: () => setState(() {
+                    _sugerencias = _catalogo.buscarLocalizacion(_locCtrl.text);
+                    _mostrarSugerencias = true;
+                  }),
                 ),
               ),
               const SizedBox(width: 12),
@@ -335,15 +455,16 @@ class _InventarioScreenState extends State<InventarioScreen> {
         itemCount: _sugerencias.length,
         itemBuilder: (_, i) {
           final clave = _sugerencias[i];
-          final desc = _catalogo.descripcionLocalizacion(clave);
+          final desc  = _catalogo.descripcionLocalizacion(clave);
           return InkWell(
             onTap: () => _seleccionarLocalizacion(clave),
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 8),
               child: RichText(
                 text: TextSpan(
-                  style: const TextStyle(color: Colors.black87, fontSize: 13),
+                  style: const TextStyle(
+                      color: Colors.black87, fontSize: 13),
                   children: [
                     TextSpan(
                         text: clave,
@@ -374,22 +495,53 @@ class _InventarioScreenState extends State<InventarioScreen> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       itemCount: _registros.length,
       itemBuilder: (_, i) {
-        final r = _registros[_registros.length - 1 - i];
+        final r    = _registros[_registros.length - 1 - i];
         final desc = _catalogo.descripcionActivo(r.cveActivo);
+        // Marcar visualmente si aparece más de una vez
+        final vecesRegistrado = _registros
+            .where((x) =>
+                x.cveActivo.toUpperCase() == r.cveActivo.toUpperCase())
+            .length;
+        final esDuplicado = vecesRegistrado > 1;
+
         return ListTile(
           dense: true,
+          tileColor: esDuplicado ? Colors.orange.shade50 : null,
           leading: CircleAvatar(
             radius: 16,
-            backgroundColor: const Color(0xFF1B4F8A),
+            backgroundColor:
+                esDuplicado ? Colors.orange : const Color(0xFF1B4F8A),
             child: Text(
               '${_registros.length - i}',
-              style:
-                  const TextStyle(color: Colors.white, fontSize: 11),
+              style: const TextStyle(
+                  color: Colors.white, fontSize: 11),
             ),
           ),
-          title: Text(r.cveActivo,
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold, fontSize: 14)),
+          title: Row(
+            children: [
+              Text(r.cveActivo,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 14)),
+              if (esDuplicado) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.orange,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '×$vecesRegistrado',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ],
+          ),
           subtitle: Text(desc.isNotEmpty ? desc : r.localizacion,
               style: const TextStyle(fontSize: 12)),
           trailing: Text(
@@ -413,7 +565,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
           Text(
             'Registros: ${_registros.length}',
             style: TextStyle(
-                color: Colors.blue.shade800, fontWeight: FontWeight.bold),
+                color: Colors.blue.shade800,
+                fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Row(
@@ -447,42 +600,31 @@ class _InventarioScreenState extends State<InventarioScreen> {
           controller: _scannerCtrl!,
           onDetect: _onDetected,
         ),
-        // Overlay con información
         Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
+          top: 0, left: 0, right: 0,
           child: Container(
             color: Colors.black.withOpacity(0.6),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 16, vertical: 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Loc: $_cveLocalizacion',
-                  style: const TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  _descLocalizacion,
-                  style:
-                      const TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-                Text(
-                  'Registros: ${_registros.length}',
-                  style:
-                      const TextStyle(color: Colors.white70, fontSize: 12),
-                ),
+                Text('Loc: $_cveLocalizacion',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold)),
+                Text(_descLocalizacion,
+                    style: const TextStyle(
+                        color: Colors.white70, fontSize: 12)),
+                Text('Registros: ${_registros.length}',
+                    style: const TextStyle(
+                        color: Colors.white70, fontSize: 12)),
               ],
             ),
           ),
         ),
-        // Botón cerrar
         Positioned(
-          bottom: 32,
-          left: 0,
-          right: 0,
+          bottom: 32, left: 0, right: 0,
           child: Center(
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
