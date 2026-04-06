@@ -22,8 +22,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   bool _cargando = true;
   List<RegistroInventario> _registros = [];
-
-  // Claves internas ya escaneadas (siempre en formato Ixxxxx)
   final Set<String> _escaneadosEnSesion = {};
 
   String? _cveLocalizacion;
@@ -34,11 +32,9 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   MobileScannerController? _scannerCtrl;
   bool   _escaneando        = false;
-
-  // Estado del recuadro — guarda el código TAL COMO SE ESCANEÓ
-  String _codigoMostrado    = '';   // Lo que se muestra: exactamente lo escaneado
+  String _codigoMostrado    = '';
   String _descMostrada      = '';
-  bool   _esNuevo           = false; // false=no escaneado aún  true=duplicado
+  bool   _esDuplicadoVisor  = false;
   bool   _noEncontrado      = false;
 
   @override
@@ -53,9 +49,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
     if (mounted) {
       setState(() {
         _registros = regs;
-        for (final r in regs) {
-          _escaneadosEnSesion.add(r.cveActivo.toUpperCase());
-        }
+        for (final r in regs) _escaneadosEnSesion.add(r.cveActivo.toUpperCase());
         _cargando = false;
       });
     }
@@ -99,52 +93,40 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   // ── Insertar activo ───────────────────────────────────────────────
 
-  Future<void> _insertarActivo(String codigoEscaneado) async {
-    if (_cveLocalizacion == null) {
+  Future<void> _insertarActivo(String codigoEscaneado,
+      {String? localizacionForzada}) async {
+    final loc = localizacionForzada ?? _cveLocalizacion;
+    if (loc == null) {
       _mostrarError('Selecciona una localización primero');
       return;
     }
 
-    // Código normalizado (siempre Ixxxxx o Cxxxxx) para guardar en archivo
     final cveInterno = _catalogo.normalizarCveActivo(codigoEscaneado);
-
-    // Descripción buscando por cualquier código
-    final desc = _catalogo.descripcionActivo(codigoEscaneado);
-
-    // ── Código que se muestra: exactamente el que escanearon ──────
-    // Si empieza con 5 (código antiguo) → muestra el 5xxxx
-    // Si empieza con I/C/P              → muestra el Ixxxx tal cual
-    final codigoDisplay = codigoEscaneado.trim();
+    final desc       = _catalogo.descripcionActivo(codigoEscaneado);
+    final display    = codigoEscaneado.trim();
 
     if (desc.isEmpty) {
       setState(() {
-        _codigoMostrado = codigoDisplay;
-        _descMostrada   = 'No encontrado en catálogo';
-        _esNuevo        = false;
-        _noEncontrado   = true;
+        _codigoMostrado   = display;
+        _descMostrada     = 'No encontrado en catálogo';
+        _esDuplicadoVisor = false;
+        _noEncontrado     = true;
       });
       return;
     }
 
-    // Verificar duplicado usando clave interna y también por teórico
     final duplicado = _esDuplicado(cveInterno);
-
-    // Actualizar recuadro con el código TAL COMO SE ESCANEÓ
     setState(() {
-      _codigoMostrado = codigoDisplay;
-      _descMostrada   = desc;
-      _esNuevo        = duplicado;   // naranja si duplicado
-      _noEncontrado   = false;
+      _codigoMostrado   = display;
+      _descMostrada     = desc;
+      _esDuplicadoVisor = duplicado;
+      _noEncontrado     = false;
     });
 
-    // Si es duplicado: solo mostrar recuadro naranja, SIN diálogo de confirmación
-    if (duplicado) return;
+    if (duplicado) return; // Solo recuadro naranja, sin diálogo
 
-    // Guardar con clave interna normalizada
     final reg = RegistroInventario(
-        localizacion: _cveLocalizacion!,
-        cveActivo:    cveInterno,
-        fecha:        DateTime.now());
+        localizacion: loc, cveActivo: cveInterno, fecha: DateTime.now());
     await _inventario.agregarRegistro(reg);
     setState(() {
       _registros.add(reg);
@@ -153,14 +135,13 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('✓ $codigoDisplay  $desc'),
+        content: Text('✓ $display  $desc'),
         backgroundColor: Colors.green.shade700,
         duration: const Duration(seconds: 2),
       ));
     }
   }
 
-  /// Verifica duplicado por clave interna y también cruzando por teórico
   bool _esDuplicado(String cveInterno) {
     if (_escaneadosEnSesion.contains(cveInterno.toUpperCase())) return true;
     final activo = _teorico.buscarPorCodigo(cveInterno);
@@ -172,10 +153,56 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   bool _mismoActivo(String a, String b) {
     if (a.toUpperCase() == b.toUpperCase()) return true;
-    final activoA = _teorico.buscarPorCodigo(a);
-    final activoB = _teorico.buscarPorCodigo(b);
-    if (activoA == null || activoB == null) return false;
-    return activoA.codigoNuevo == activoB.codigoNuevo;
+    final aa = _teorico.buscarPorCodigo(a);
+    final bb = _teorico.buscarPorCodigo(b);
+    if (aa == null || bb == null) return false;
+    return aa.codigoNuevo == bb.codigoNuevo;
+  }
+
+  // ── Eliminar registro individual ──────────────────────────────────
+
+  Future<void> _eliminarRegistro(int index) async {
+    final reg = _registros[index];
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Eliminar registro'),
+        content: Text('¿Eliminar ${reg.cveActivo} de ${reg.localizacion}?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    setState(() => _registros.removeAt(index));
+
+    // Reescribir archivo completo sin el registro eliminado
+    await _inventario.borrarArchivo();
+    for (final r in _registros) {
+      await _inventario.agregarRegistro(r);
+    }
+
+    // Reconstruir set de escaneados
+    _escaneadosEnSesion.clear();
+    for (final r in _registros) {
+      _escaneadosEnSesion.add(r.cveActivo.toUpperCase());
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Registro eliminado'),
+        backgroundColor: Colors.red,
+        duration: Duration(seconds: 2),
+      ));
+    }
   }
 
   // ── Verificar ─────────────────────────────────────────────────────
@@ -193,12 +220,19 @@ class _InventarioScreenState extends State<InventarioScreen> {
       ));
       return;
     }
-    Navigator.push(context, MaterialPageRoute(
-      builder: (_) => VerificacionScreen(
-        localizacion: _cveLocalizacion!,
-        registros:    _registros,
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => VerificacionScreen(
+          localizacion: _cveLocalizacion!,
+          registros:    _registros,
+          onActivoEscaneado: (codigo) => _insertarActivo(
+            codigo,
+            localizacionForzada: _cveLocalizacion,
+          ),
+        ),
       ),
-    ));
+    ).then((_) => setState(() {})); // Refrescar al regresar
   }
 
   // ── Escáner ───────────────────────────────────────────────────────
@@ -208,13 +242,17 @@ class _InventarioScreenState extends State<InventarioScreen> {
       _mostrarError('Selecciona una localización primero');
       return;
     }
+    _iniciarEscaner();
+  }
+
+  void _iniciarEscaner() {
     setState(() {
-      _escaneando     = true;
-      _codigoMostrado = '';
-      _descMostrada   = '';
-      _esNuevo        = false;
-      _noEncontrado   = false;
-      _scannerCtrl    = MobileScannerController(
+      _escaneando       = true;
+      _codigoMostrado   = '';
+      _descMostrada     = '';
+      _esDuplicadoVisor = false;
+      _noEncontrado     = false;
+      _scannerCtrl      = MobileScannerController(
           detectionSpeed: DetectionSpeed.noDuplicates);
     });
   }
@@ -244,7 +282,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
     if (result != null && result.isNotEmpty) await _insertarActivo(result);
   }
 
-  // ── Borrar / Compartir ────────────────────────────────────────────
+  // ── Borrar todo / Compartir ───────────────────────────────────────
 
   Future<void> _borrarArchivo() async {
     final confirm = await showDialog<bool>(
@@ -265,10 +303,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
     );
     if (confirm == true) {
       await _inventario.borrarArchivo();
-      setState(() {
-        _registros.clear();
-        _escaneadosEnSesion.clear();
-      });
+      setState(() { _registros.clear(); _escaneadosEnSesion.clear(); });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Archivo de inventario borrado')));
@@ -296,7 +331,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
         actions: [
           IconButton(icon: const Icon(Icons.share), tooltip: 'Compartir',
               onPressed: _registros.isEmpty ? null : _compartirArchivo),
-          IconButton(icon: const Icon(Icons.delete_outline), tooltip: 'Borrar',
+          IconButton(icon: const Icon(Icons.delete_outline), tooltip: 'Borrar todo',
               onPressed: _registros.isEmpty ? null : _borrarArchivo),
         ],
       ),
@@ -314,8 +349,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
     ]);
   }
 
-  // ── Panel localización ────────────────────────────────────────────
-
   Widget _buildPanelLocalizacion() {
     return Container(
       color: Colors.grey.shade100,
@@ -330,8 +363,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
               decoration: const InputDecoration(
                 isDense: true, hintText: 'Clave o nombre...',
                 border: OutlineInputBorder(),
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               ),
               onChanged: _onLocTextChanged,
               onTap: () => setState(() {
@@ -381,9 +413,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
               child: RichText(text: TextSpan(
                 style: const TextStyle(color: Colors.black87, fontSize: 13),
                 children: [
-                  TextSpan(text: clave,
-                      style: const TextStyle(fontWeight: FontWeight.bold,
-                          color: Color(0xFF1B4F8A))),
+                  TextSpan(text: clave, style: const TextStyle(
+                      fontWeight: FontWeight.bold, color: Color(0xFF1B4F8A))),
                   TextSpan(text: '  $desc'),
                 ],
               )),
@@ -394,7 +425,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
     );
   }
 
-  // ── Lista de registros ────────────────────────────────────────────
+  // ── Lista con botón eliminar ──────────────────────────────────────
 
   Widget _buildLista() {
     if (_registros.isEmpty) {
@@ -408,46 +439,95 @@ class _InventarioScreenState extends State<InventarioScreen> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       itemCount: _registros.length,
       itemBuilder: (_, i) {
-        final r    = _registros[_registros.length - 1 - i];
+        final realIdx = _registros.length - 1 - i;
+        final r    = _registros[realIdx];
         final desc = _catalogo.descripcionActivo(r.cveActivo);
         final veces = _registros
             .where((x) => _mismoActivo(x.cveActivo, r.cveActivo))
             .length;
         final esDup = veces > 1;
-        return ListTile(
-          dense: true,
-          tileColor: esDup ? Colors.orange.shade50 : null,
-          leading: CircleAvatar(
-            radius: 16,
-            backgroundColor: esDup ? Colors.orange : const Color(0xFF1B4F8A),
-            child: Text('${_registros.length - i}',
-                style: const TextStyle(color: Colors.white, fontSize: 11)),
+
+        return Dismissible(
+          key: Key('${r.cveActivo}_${r.fecha.millisecondsSinceEpoch}'),
+          direction: DismissDirection.endToStart,
+          background: Container(
+            alignment: Alignment.centerRight,
+            color: Colors.red.shade700,
+            padding: const EdgeInsets.only(right: 20),
+            child: const Icon(Icons.delete, color: Colors.white),
           ),
-          title: Row(children: [
-            Text(r.cveActivo,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-            if (esDup) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(color: Colors.orange,
-                    borderRadius: BorderRadius.circular(10)),
-                child: Text('×$veces', style: const TextStyle(
-                    color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+          confirmDismiss: (_) async {
+            final confirm = await showDialog<bool>(
+              context: context,
+              builder: (_) => AlertDialog(
+                title: const Text('Eliminar registro'),
+                content: Text('¿Eliminar ${r.cveActivo}?'),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancelar')),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Eliminar'),
+                  ),
+                ],
               ),
-            ],
-          ]),
-          subtitle: Text(desc.isNotEmpty ? desc : r.localizacion,
-              style: const TextStyle(fontSize: 12)),
-          trailing: Text(r.localizacion,
-              style: TextStyle(color: Colors.blue.shade700,
-                  fontSize: 11, fontWeight: FontWeight.w500)),
+            );
+            return confirm ?? false;
+          },
+          onDismissed: (_) async {
+            setState(() => _registros.removeAt(realIdx));
+            await _inventario.borrarArchivo();
+            for (final reg in _registros) await _inventario.agregarRegistro(reg);
+            _escaneadosEnSesion.clear();
+            for (final reg in _registros) _escaneadosEnSesion.add(reg.cveActivo.toUpperCase());
+          },
+          child: ListTile(
+            dense: true,
+            tileColor: esDup ? Colors.orange.shade50 : null,
+            leading: CircleAvatar(
+              radius: 16,
+              backgroundColor: esDup ? Colors.orange : const Color(0xFF1B4F8A),
+              child: Text('${_registros.length - i}',
+                  style: const TextStyle(color: Colors.white, fontSize: 11)),
+            ),
+            title: Row(children: [
+              Text(r.cveActivo, style: const TextStyle(
+                  fontWeight: FontWeight.bold, fontSize: 14)),
+              if (esDup) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: Colors.orange,
+                      borderRadius: BorderRadius.circular(10)),
+                  child: Text('×$veces', style: const TextStyle(
+                      color: Colors.white, fontSize: 10,
+                      fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ]),
+            subtitle: Text(desc.isNotEmpty ? desc : r.localizacion,
+                style: const TextStyle(fontSize: 12)),
+            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+              Text(r.localizacion,
+                  style: TextStyle(color: Colors.blue.shade700,
+                      fontSize: 11, fontWeight: FontWeight.w500)),
+              const SizedBox(width: 4),
+              // Botón eliminar
+              GestureDetector(
+                onTap: () => _eliminarRegistro(realIdx),
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 4),
+                  child: Icon(Icons.remove_circle_outline,
+                      color: Colors.red.shade300, size: 20),
+                ),
+              ),
+            ]),
+          ),
         );
       },
     );
   }
-
-  // ── Botones inferiores ────────────────────────────────────────────
 
   Widget _buildBotones() {
     int? total;
@@ -460,11 +540,9 @@ class _InventarioScreenState extends State<InventarioScreen> {
             .where((r) => r.localizacion.toUpperCase() == _cveLocalizacion)
             .map((r) => r.cveActivo.toUpperCase())
             .toSet();
-        escaneadosEnLoc = teo
-            .where((a) =>
-                escSet.contains(a.codigoNuevo) ||
-                escSet.contains(a.codigoAnterior))
-            .length;
+        escaneadosEnLoc = teo.where((a) =>
+            escSet.contains(a.codigoNuevo) ||
+            escSet.contains(a.codigoAnterior)).length;
       }
     }
 
@@ -518,8 +596,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
     return Stack(children: [
       MobileScanner(controller: _scannerCtrl!, onDetect: _onDetected),
       _buildOverlayConRecuadro(),
-
-      // Info superior
       Positioned(
         top: 0, left: 0, right: 0,
         child: Container(
@@ -527,7 +603,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('Loc: $_cveLocalizacion',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                style: const TextStyle(color: Colors.white,
+                    fontWeight: FontWeight.bold)),
             Text(_descLocalizacion,
                 style: const TextStyle(color: Colors.white70, fontSize: 12)),
             Text('Registros: ${_registros.length}',
@@ -535,8 +612,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
           ]),
         ),
       ),
-
-      // Panel inferior
       Positioned(
         bottom: 0, left: 0, right: 0,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -548,9 +623,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
               width: double.infinity,
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red.shade700,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
+                    backgroundColor: Colors.red.shade700,
+                    padding: const EdgeInsets.symmetric(vertical: 12)),
                 onPressed: _cerrarEscaner,
                 icon: const Icon(Icons.stop),
                 label: const Text('Detener escáner'),
@@ -566,35 +640,29 @@ class _InventarioScreenState extends State<InventarioScreen> {
     return LayoutBuilder(builder: (context, constraints) {
       final w = constraints.maxWidth;
       final h = constraints.maxHeight;
-      const recuadroW = 260.0;
-      const recuadroH = 160.0;
-      final left = (w - recuadroW) / 2;
-      final top  = (h - recuadroH) / 2 - 30;
+      const rW = 260.0, rH = 160.0;
+      final left = (w - rW) / 2;
+      final top  = (h - rH) / 2 - 30;
 
-      // Color del borde según estado
       final borderColor = _codigoMostrado.isEmpty
           ? Colors.white
-          : _noEncontrado
-              ? Colors.red
-              : _esNuevo          // duplicado → naranja
-                  ? Colors.orange
-                  : Colors.green;
+          : _noEncontrado ? Colors.red
+          : _esDuplicadoVisor ? Colors.orange
+          : Colors.green;
 
       return Stack(children: [
         Positioned.fill(child: Container(color: Colors.black.withOpacity(0.45))),
         Positioned(
-          left: left, top: top, width: recuadroW, height: recuadroH,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.transparent,
-              border: Border.all(color: borderColor, width: 2.5),
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
+          left: left, top: top, width: rW, height: rH,
+          child: Container(decoration: BoxDecoration(
+            color: Colors.transparent,
+            border: Border.all(color: borderColor, width: 2.5),
+            borderRadius: BorderRadius.circular(8),
+          )),
         ),
-        ..._buildEsquinas(left, top, recuadroW, recuadroH, borderColor),
+        ..._buildEsquinas(left, top, rW, rH, borderColor),
         Positioned(
-          left: left, top: top + recuadroH + 8, width: recuadroW,
+          left: left, top: top + rH + 8, width: rW,
           child: Text(
             _codigoMostrado.isEmpty ? 'Apunta el código al recuadro' : '',
             textAlign: TextAlign.center,
@@ -605,37 +673,29 @@ class _InventarioScreenState extends State<InventarioScreen> {
     });
   }
 
-  List<Widget> _buildEsquinas(
-      double left, double top, double w, double h, Color color) {
+  List<Widget> _buildEsquinas(double l, double t, double w, double h, Color c) {
     const len = 20.0, thick = 3.5;
-    Widget corner(double l, double t, bool izq, bool arr) => Positioned(
-      left: l, top: t,
+    Widget corner(double x, double y, bool izq, bool arr) => Positioned(
+      left: x, top: y,
       child: SizedBox(width: len, height: len,
           child: CustomPaint(painter: _CornerPainter(
-              color: color, thickness: thick,
-              izquierda: izq, arriba: arr))),
+              color: c, thickness: thick, izquierda: izq, arriba: arr))),
     );
     return [
-      corner(left,           top,           true,  true),
-      corner(left + w - len, top,           false, true),
-      corner(left,           top + h - len, true,  false),
-      corner(left + w - len, top + h - len, false, false),
+      corner(l,         t,         true,  true),
+      corner(l + w - len, t,       false, true),
+      corner(l,         t + h - len, true,  false),
+      corner(l + w - len, t + h - len, false, false),
     ];
   }
 
-  /// Panel inferior del escáner — muestra el código TAL COMO SE ESCANEÓ
   Widget _buildPanelUltimoEscaneo() {
-    final bgColor = _noEncontrado
-        ? Colors.red.shade900
-        : _esNuevo
-            ? Colors.orange.shade900
-            : Colors.green.shade900;
-    final icono = _noEncontrado
-        ? Icons.error_outline
-        : _esNuevo
-            ? Icons.warning_amber_outlined
-            : Icons.check_circle_outline;
-    final etiqueta = _esNuevo ? '⚠ Activo ya registrado' : null;
+    final bgColor = _noEncontrado ? Colors.red.shade900
+        : _esDuplicadoVisor ? Colors.orange.shade900
+        : Colors.green.shade900;
+    final icono = _noEncontrado ? Icons.error_outline
+        : _esDuplicadoVisor ? Icons.warning_amber_outlined
+        : Icons.check_circle_outline;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -649,54 +709,40 @@ class _InventarioScreenState extends State<InventarioScreen> {
         const SizedBox(width: 10),
         Expanded(child: Column(
             crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // Código exacto escaneado — sin transformar
-          Text(
-            _codigoMostrado,
-            style: const TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-          ),
+          Text(_codigoMostrado, style: const TextStyle(
+              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 2),
-          Text(_descMostrada,
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
+          Text(_descMostrada, style: const TextStyle(
+              color: Colors.white70, fontSize: 12),
               maxLines: 2, overflow: TextOverflow.ellipsis),
-          if (etiqueta != null)
-            Text(etiqueta,
-                style: const TextStyle(
-                    color: Colors.orangeAccent, fontSize: 11,
-                    fontWeight: FontWeight.w500)),
+          if (_esDuplicadoVisor)
+            const Text('⚠ Activo ya registrado', style: TextStyle(
+                color: Colors.orangeAccent, fontSize: 11,
+                fontWeight: FontWeight.w500)),
         ])),
       ]),
     );
   }
 }
 
-// ── Painter esquinas ──────────────────────────────────────────────
-
 class _CornerPainter extends CustomPainter {
   final Color color;
   final double thickness;
-  final bool izquierda;
-  final bool arriba;
-
-  const _CornerPainter({
-    required this.color, required this.thickness,
-    required this.izquierda, required this.arriba,
-  });
-
+  final bool izquierda, arriba;
+  const _CornerPainter({required this.color, required this.thickness,
+      required this.izquierda, required this.arriba});
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color ..strokeWidth = thickness
-      ..strokeCap = StrokeCap.square ..style = PaintingStyle.stroke;
+    final p = Paint()..color = color ..strokeWidth = thickness
+        ..strokeCap = StrokeCap.square ..style = PaintingStyle.stroke;
     final x  = izquierda ? 0.0 : size.width;
     final y  = arriba    ? 0.0 : size.height;
     final dx = izquierda ? size.width  : -size.width;
     final dy = arriba    ? size.height : -size.height;
-    canvas.drawLine(Offset(x, y), Offset(x + dx, y), paint);
-    canvas.drawLine(Offset(x, y), Offset(x, y + dy), paint);
+    canvas.drawLine(Offset(x, y), Offset(x + dx, y), p);
+    canvas.drawLine(Offset(x, y), Offset(x, y + dy), p);
   }
-
   @override
-  bool shouldRepaint(_CornerPainter old) =>
-      old.color != color || old.izquierda != izquierda || old.arriba != arriba;
+  bool shouldRepaint(_CornerPainter o) =>
+      o.color != color || o.izquierda != izquierda || o.arriba != arriba;
 }
