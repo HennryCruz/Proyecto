@@ -405,7 +405,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
                 case 'excel':     _exportarExcel(); break;
                 case 'compartir':
                   if (_registros.isNotEmpty) {
-                    _inventario.rutaArchivo.then((ruta) =>
+                    _inventario.exportarTxtSiga(_registros).then((ruta) =>
                         Share.shareXFiles([XFile(ruta)],
                             subject: 'ALM_Inventarios.txt'));
                   }

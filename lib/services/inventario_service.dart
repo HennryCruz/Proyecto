@@ -17,7 +17,14 @@ class RegistroInventario {
     this.nota = '',
   });
 
+  // Formato SIGA: siempre LOCALIZACION_CVEACTIVO_FECHA (sin nota)
   String toLineTxt() {
+    final fechaStr = DateFormat('dd/MM/yyyy').format(fecha);
+    return '${localizacion}_${cveActivo}_$fechaStr';
+  }
+
+  // Formato completo con nota — solo para archivos internos y Excel
+  String toLineCompleto() {
     final fechaStr = DateFormat('dd/MM/yyyy').format(fecha);
     final base = '${localizacion}_${cveActivo}_$fechaStr';
     return nota.isNotEmpty ? '${base}_$nota' : base;
@@ -105,25 +112,24 @@ class InventarioService {
   }
 
   /// Agrega el registro al archivo activo Y al archivo de sesión del día.
-  /// Así cada escaneo queda guardado en ambos sitios automáticamente.
+  /// Archivo activo usa toLineCompleto (preserva nota para leer de vuelta).
+  /// El TXT que se comparte con SIGA usa toLineTxt() (sin nota).
   Future<void> agregarRegistro(RegistroInventario r) async {
-    final linea = '${r.toLineTxt()}\n';
-
-    // 1 — Archivo activo (ALM_Inventarios.txt)
+    // 1 — Archivo activo con nota (para leer de vuelta correctamente)
     final activo = await _archivoActualFile;
-    await activo.writeAsString(linea, mode: FileMode.append);
+    await activo.writeAsString('${r.toLineCompleto()}\n',
+        mode: FileMode.append);
 
-    // 2 — Archivo de sesión del día (Inventario_yyyyMMdd.txt)
-    //     Se crea automáticamente si no existe
+    // 2 — Archivo de sesión del día (también con nota)
     await _agregarASesionDelDia(r);
   }
 
   Future<void> _agregarASesionDelDia(RegistroInventario r) async {
     try {
-      final d   = await _dir;
-      final hoy = DateFormat('yyyyMMdd').format(DateTime.now());
+      final d    = await _dir;
+      final hoy  = DateFormat('yyyyMMdd').format(DateTime.now());
       final file = File('${d.path}/Inventario_$hoy.txt');
-      await file.writeAsString('${r.toLineTxt()}\n',
+      await file.writeAsString('${r.toLineCompleto()}\n',
           mode: FileMode.append);
     } catch (_) {
       // Si falla el guardado secundario, no interrumpir el flujo
@@ -198,5 +204,19 @@ class InventarioService {
   Future<String> rutaSesion(String id) async {
     final d = await _dir;
     return '${d.path}/Inventario_$id.txt';
+  }
+
+  /// Genera un TXT limpio SIN notas para subir al SIGA.
+  /// Formato: LOCALIZACION_CVEACTIVO_FECHA (una línea por registro)
+  Future<String> exportarTxtSiga(List<RegistroInventario> registros) async {
+    final d        = await _dir;
+    final fechaStr = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+    final file     = File('${d.path}/SIGA_$fechaStr.txt');
+    final buf      = StringBuffer();
+    for (final r in registros) {
+      buf.writeln(r.toLineTxt()); // sin nota
+    }
+    await file.writeAsString(buf.toString());
+    return file.path;
   }
 }

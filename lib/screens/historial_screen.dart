@@ -33,7 +33,8 @@ class _HistorialScreenState extends State<HistorialScreen> {
   // ── Compartir TXT ─────────────────────────────────────────────────
 
   Future<void> _compartirTxt(SesionInventario s) async {
-    final ruta = await _inventario.rutaSesion(s.id);
+    // Genera TXT sin notas (formato SIGA limpio)
+    final ruta = await _inventario.exportarTxtSiga(s.registros);
     await Share.shareXFiles(
       [XFile(ruta)],
       subject: 'Inventario CENAM ${_fechaLegible(s.inicio)}',
