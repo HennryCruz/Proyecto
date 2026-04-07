@@ -5,14 +5,38 @@ void main() {
   runApp(const InventarioCENAMApp());
 }
 
-class InventarioCENAMApp extends StatelessWidget {
+class InventarioCENAMApp extends StatefulWidget {
   const InventarioCENAMApp({super.key});
+
+  // Permite cambiar el tema desde cualquier parte de la app
+  static _InventarioCENAMAppState? of(BuildContext context) =>
+      context.findAncestorStateOfType<_InventarioCENAMAppState>();
+
+  @override
+  State<InventarioCENAMApp> createState() => _InventarioCENAMAppState();
+}
+
+class _InventarioCENAMAppState extends State<InventarioCENAMApp> {
+  ThemeMode _themeMode = ThemeMode.system;
+
+  void toggleTheme() {
+    setState(() {
+      _themeMode = _themeMode == ThemeMode.dark
+          ? ThemeMode.light
+          : ThemeMode.dark;
+    });
+  }
+
+  bool get isDark => _themeMode == ThemeMode.dark;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Inventario CENAM',
       debugShowCheckedModeBanner: false,
+      themeMode: _themeMode,
+
+      // ── Tema claro ──────────────────────────────────────────────
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF1B4F8A),
@@ -28,11 +52,42 @@ class InventarioCENAMApp extends StatelessWidget {
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF1B4F8A),
             foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 20, vertical: 14),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8)),
           ),
         ),
       ),
+
+      // ── Tema oscuro ─────────────────────────────────────────────
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF5B9BD5),
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+        scaffoldBackgroundColor: const Color(0xFF121212),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF1A1A2E),
+          foregroundColor: Colors.white,
+          elevation: 2,
+        ),
+        cardTheme: const CardTheme(
+          color: Color(0xFF1E1E1E),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF5B9BD5),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(
+                horizontal: 20, vertical: 14),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+      ),
+
       home: const InventarioScreen(),
     );
   }

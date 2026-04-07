@@ -3,7 +3,9 @@ import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:vibration/vibration.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../main.dart';
 import '../services/catalogo_service.dart';
 import '../services/excel_service.dart';
 import '../services/inventario_service.dart';
@@ -154,17 +156,55 @@ class _InventarioScreenState extends State<InventarioScreen> {
     final desc       = _catalogo.descripcionActivo(codigoEscaneado);
     final display    = codigoEscaneado.trim();
 
+    // ── Activo NO catalogado ─────────────────────────────────────────
+    // Si no está en el catálogo, lo registramos igual con tipo NC
     if (desc.isEmpty) {
-      _vibrar(error: true);
+      final duplicado = _esDuplicado(cveInterno);
+
+      if (duplicado) {
+        _vibrar(duplicado: true);
+        setState(() {
+          _codigoMostrado   = display;
+          _descMostrada     = '⚠ Ya registrado (no catalogado)';
+          _esDuplicadoVisor = true;
+          _noEncontrado     = false;
+        });
+        return;
+      }
+
+      // Mostrar en el visor como ámbar (no catalogado)
+      _vibrar();
       setState(() {
         _codigoMostrado   = display;
-        _descMostrada     = 'No encontrado en catálogo';
+        _descMostrada     = 'Activo no catalogado — se registrará';
         _esDuplicadoVisor = false;
-        _noEncontrado     = true;
+        _noEncontrado     = true; // usamos el flag para color ámbar
       });
+
+      final reg = RegistroInventario(
+        localizacion: loc,
+        cveActivo:    cveInterno,
+        fecha:        DateTime.now(),
+        nota:         nota,
+        tipo:         TipoActivo.noCatalogado,
+      );
+      await _inventario.agregarRegistro(reg);
+      setState(() {
+        _registros.add(reg);
+        _escaneadosEnSesion.add(cveInterno.toUpperCase());
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('⚠ $display registrado (no catalogado)'),
+          backgroundColor: Colors.amber.shade700,
+          duration: const Duration(seconds: 3),
+        ));
+      }
       return;
     }
 
+    // ── Activo catalogado ─────────────────────────────────────────────
     final duplicado = _esDuplicado(cveInterno);
     setState(() {
       _codigoMostrado   = display;
@@ -178,7 +218,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
       return;
     }
 
-    _vibrar(); // Pulso corto = registro exitoso
+    _vibrar();
 
     final reg = RegistroInventario(
       localizacion: loc,
@@ -288,6 +328,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
       _mostrarError('Selecciona una localización primero');
       return;
     }
+    WakelockPlus.enable(); // Pantalla siempre encendida al escanear
     setState(() {
       _escaneando       = true;
       _codigoMostrado   = '';
@@ -308,6 +349,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
   }
 
   void _cerrarEscaner() {
+    WakelockPlus.disable(); // Restaurar comportamiento normal
     _scannerCtrl?.dispose();
     _scannerCtrl = null;
     setState(() => _escaneando = false);
@@ -380,6 +422,16 @@ class _InventarioScreenState extends State<InventarioScreen> {
       appBar: AppBar(
         title: const Text('Inventario CENAM'),
         actions: [
+          // Modo oscuro
+          IconButton(
+            icon: Icon(
+              InventarioCENAMApp.of(context)?.isDark ?? false
+                  ? Icons.light_mode_outlined
+                  : Icons.dark_mode_outlined,
+            ),
+            tooltip: 'Cambiar tema',
+            onPressed: () => InventarioCENAMApp.of(context)?.toggleTheme(),
+          ),
           IconButton(icon: const Icon(Icons.bar_chart),
               tooltip: 'Dashboard',
               onPressed: () => Navigator.push(context, MaterialPageRoute(
@@ -608,13 +660,16 @@ class _InventarioScreenState extends State<InventarioScreen> {
             .where((x) => _mismoActivo(x.cveActivo, r.cveActivo)).length;
         final esDup      = veces > 1;
         final tieneNota  = r.nota.isNotEmpty;
+        final esNC       = r.tipo == TipoActivo.noCatalogado;
 
-        // Color del tile: nota tiene prioridad visual sobre duplicado
+        // Prioridad de color: nota > no-catalogado > duplicado
         Color? tileColor;
         if (tieneNota && esDup) {
           tileColor = Colors.purple.shade50;
         } else if (tieneNota) {
           tileColor = Colors.purple.shade50;
+        } else if (esNC) {
+          tileColor = Colors.amber.shade50;
         } else if (esDup) {
           tileColor = Colors.orange.shade50;
         }
@@ -660,9 +715,11 @@ class _InventarioScreenState extends State<InventarioScreen> {
                 radius: 16,
                 backgroundColor: tieneNota
                     ? Colors.purple.shade400
-                    : esDup
-                        ? Colors.orange
-                        : const Color(0xFF1B4F8A),
+                    : esNC
+                        ? Colors.amber.shade600
+                        : esDup
+                            ? Colors.orange
+                            : const Color(0xFF1B4F8A),
                 child: Text('${_registros.length - i}',
                     style: const TextStyle(
                         color: Colors.white, fontSize: 11)),
@@ -681,6 +738,22 @@ class _InventarioScreenState extends State<InventarioScreen> {
                   child: Text('×$veces', style: const TextStyle(
                       color: Colors.white, fontSize: 10,
                       fontWeight: FontWeight.bold)),
+                ),
+              ],
+              // Badge NC para no catalogados
+              if (esNC) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade600,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Text('NC', style: TextStyle(
+                      color: Colors.white, fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5)),
                 ),
               ],
               // Badge "NOTA" resaltado

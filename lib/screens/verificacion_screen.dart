@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../models/activo_teorico.dart';
+import '../services/excel_service.dart';
 import '../services/inventario_service.dart';
 import '../services/teorico_service.dart';
 
@@ -24,16 +26,16 @@ class VerificacionScreen extends StatefulWidget {
 class _VerificacionScreenState extends State<VerificacionScreen>
     with SingleTickerProviderStateMixin {
   final _teorico = TeoricoService();
+  final _excel   = ExcelService();
   late TabController _tabCtrl;
 
-  List<ActivoTeorico> _esperados  = [];
-  List<ActivoTeorico> _faltantes  = [];
-  List<ActivoTeorico> _escaneados = [];
-  List<RegistroInventario> _sobrantes = [];
+  List<ActivoTeorico>      _esperados  = [];
+  List<ActivoTeorico>      _faltantes  = [];
+  List<ActivoTeorico>      _escaneados = [];
+  List<RegistroInventario> _sobrantes  = [];
 
-  // Escáner para faltante individual
   MobileScannerController? _scannerCtrl;
-  ActivoTeorico? _activoEnEscaneo; // el faltante que estamos escaneando
+  ActivoTeorico? _activoEnEscaneo;
 
   @override
   void initState() {
@@ -60,8 +62,8 @@ class _VerificacionScreenState extends State<VerificacionScreen>
         !(a.codigoAnterior.isNotEmpty &&
             escSet.contains(a.codigoAnterior))).toList();
 
-    final codigosTeoricoNuevo    = _esperados.map((a) => a.codigoNuevo).toSet();
-    final codigosTeoricoAnterior = _esperados
+    final codigosNuevo    = _esperados.map((a) => a.codigoNuevo).toSet();
+    final codigosAnterior = _esperados
         .where((a) => a.codigoAnterior.isNotEmpty)
         .map((a) => a.codigoAnterior).toSet();
 
@@ -70,8 +72,8 @@ class _VerificacionScreenState extends State<VerificacionScreen>
       final c = r.cveActivo.toUpperCase();
       final activo = _teorico.buscarPorCodigo(c);
       if (activo == null) return true;
-      return !codigosTeoricoNuevo.contains(activo.codigoNuevo) &&
-             !codigosTeoricoAnterior.contains(activo.codigoAnterior);
+      return !codigosNuevo.contains(activo.codigoNuevo) &&
+             !codigosAnterior.contains(activo.codigoAnterior);
     }).toList();
   }
 
@@ -88,7 +90,15 @@ class _VerificacionScreenState extends State<VerificacionScreen>
     setState(() {
       _activoEnEscaneo = activo;
       _scannerCtrl = MobileScannerController(
-          detectionSpeed: DetectionSpeed.noDuplicates);
+        detectionSpeed: DetectionSpeed.normal,
+        formats: const [
+          BarcodeFormat.code128, BarcodeFormat.code39,
+          BarcodeFormat.ean13,   BarcodeFormat.ean8,
+          BarcodeFormat.itf,     BarcodeFormat.codabar,
+          BarcodeFormat.dataMatrix, BarcodeFormat.qrCode,
+        ],
+        autoStart: true,
+      );
     });
   }
 
@@ -102,17 +112,16 @@ class _VerificacionScreenState extends State<VerificacionScreen>
     final codigo = capture.barcodes.firstOrNull?.rawValue;
     if (codigo == null || codigo.isEmpty) return;
 
-    final activo = _activoEnEscaneo!;
-
-    // Verificar que el código escaneado corresponde al activo esperado
+    final activo         = _activoEnEscaneo!;
     final activoEscaneado = _teorico.buscarPorCodigo(codigo);
-    final corresponde = activoEscaneado != null &&
+    final corresponde    = activoEscaneado != null &&
         activoEscaneado.codigoNuevo == activo.codigoNuevo;
 
     if (!corresponde) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('⚠ Código no corresponde a ${_codigoPrincipal(activo)}'),
+          content: Text(
+              '⚠ Código no corresponde a ${_codigoPrincipal(activo)}'),
           backgroundColor: Colors.orange.shade700,
           duration: const Duration(seconds: 2),
         ));
@@ -120,11 +129,8 @@ class _VerificacionScreenState extends State<VerificacionScreen>
       return;
     }
 
-    // Registrar el activo
     _cerrarEscanerFaltante();
     await widget.onActivoEscaneado(codigo);
-
-    // Recalcular faltantes
     setState(() => _calcular());
 
     if (mounted) {
@@ -136,8 +142,49 @@ class _VerificacionScreenState extends State<VerificacionScreen>
     }
   }
 
-  // ── Helper: código que se muestra primero ─────────────────────────
-  // Prioridad al código anterior (5xxx) si existe
+  // ── Exportar diferencias a Excel ──────────────────────────────────
+
+  Future<void> _exportarDiferenciasExcel() async {
+    if (_faltantes.isEmpty && _sobrantes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('¡Todo correcto! No hay diferencias que exportar.'),
+        backgroundColor: Colors.green,
+      ));
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: const Text('Generando reporte de diferencias...'),
+      backgroundColor: Colors.blue.shade700,
+      duration: const Duration(seconds: 2),
+    ));
+
+    try {
+      final ruta = await _excel.exportarDiferencias(
+        localizacion: widget.localizacion,
+        faltantes:    _faltantes,
+        sobrantes:    _sobrantes,
+        escaneados:   _escaneados,
+        registros:    widget.registros,
+      );
+      await Share.shareXFiles(
+        [XFile(ruta,
+            mimeType: 'application/vnd.openxmlformats-officedocument'
+                '.spreadsheetml.sheet')],
+        subject: 'Diferencias ${widget.localizacion}',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red.shade700,
+        ));
+      }
+    }
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────
+
   String _codigoPrincipal(ActivoTeorico a) =>
       a.codigoAnterior.isNotEmpty ? a.codigoAnterior : a.codigoNuevo;
 
@@ -148,10 +195,7 @@ class _VerificacionScreenState extends State<VerificacionScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Si está en modo escaneo de faltante, mostrar escáner
-    if (_activoEnEscaneo != null) {
-      return _buildEscanerFaltante();
-    }
+    if (_activoEnEscaneo != null) return _buildEscanerFaltante();
 
     final total      = _esperados.length;
     final escaneados = _escaneados.length;
@@ -160,6 +204,14 @@ class _VerificacionScreenState extends State<VerificacionScreen>
     return Scaffold(
       appBar: AppBar(
         title: Text('Verificación ${widget.localizacion}'),
+        actions: [
+          // Botón exportar diferencias Excel
+          IconButton(
+            icon: const Icon(Icons.difference_outlined),
+            tooltip: 'Exportar diferencias Excel',
+            onPressed: _exportarDiferenciasExcel,
+          ),
+        ],
         bottom: TabBar(
           controller: _tabCtrl,
           labelColor: Colors.white,
@@ -186,60 +238,61 @@ class _VerificacionScreenState extends State<VerificacionScreen>
     );
   }
 
-  // ── Escáner de faltante individual ────────────────────────────────
+  // ── Escáner de faltante ───────────────────────────────────────────
 
   Widget _buildEscanerFaltante() {
     final activo = _activoEnEscaneo!;
     return Scaffold(
       body: Stack(children: [
-        MobileScanner(controller: _scannerCtrl!, onDetect: _onFaltanteDetectado),
-        // Panel superior — activo que buscamos
+        MobileScanner(
+            controller: _scannerCtrl!,
+            onDetect: _onFaltanteDetectado),
         Positioned(
           top: 0, left: 0, right: 0,
           child: Container(
-            color: Colors.black.withOpacity(0.75),
+            color: Colors.black.withOpacity(0.78),
             padding: const EdgeInsets.fromLTRB(16, 48, 16, 16),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
               const Text('Buscando activo faltante:',
-                  style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  style: TextStyle(
+                      color: Colors.white70, fontSize: 12)),
               const SizedBox(height: 4),
               Text(_codigoPrincipal(activo),
                   style: const TextStyle(color: Colors.white,
                       fontWeight: FontWeight.bold, fontSize: 18)),
               if (_codigoSecundario(activo).isNotEmpty)
                 Text(_codigoSecundario(activo),
-                    style: const TextStyle(color: Colors.white60, fontSize: 13)),
+                    style: const TextStyle(
+                        color: Colors.white60, fontSize: 13)),
               Text(activo.descripcion,
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  style: const TextStyle(
+                      color: Colors.white70, fontSize: 13),
                   maxLines: 2, overflow: TextOverflow.ellipsis),
-              if (activo.marca.isNotEmpty || activo.modelo.isNotEmpty)
-                Text('${activo.marca}  ${activo.modelo}',
-                    style: const TextStyle(color: Colors.white54, fontSize: 12)),
             ]),
           ),
         ),
-        // Recuadro de escaneo
-        Center(
-          child: Container(
-            width: 260, height: 160,
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.white, width: 2.5),
-              borderRadius: BorderRadius.circular(8),
-            ),
+        Center(child: Container(
+          width: 300, height: 140,
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.white, width: 2.5),
+            borderRadius: BorderRadius.circular(8),
           ),
-        ),
-        // Botón cancelar
+        )),
         Positioned(
           bottom: 0, left: 0, right: 0,
           child: Container(
             color: Colors.black.withOpacity(0.7),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 16, vertical: 16),
             child: SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.red.shade700,
-                    padding: const EdgeInsets.symmetric(vertical: 12)),
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 12)),
                 onPressed: _cerrarEscanerFaltante,
                 icon: const Icon(Icons.close),
                 label: const Text('Cancelar'),
@@ -255,16 +308,17 @@ class _VerificacionScreenState extends State<VerificacionScreen>
 
   Widget _buildResumen(int total, int escaneados, double pct) {
     return Container(
-      color: Colors.grey.shade100,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest
+          .withOpacity(0.5),
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       child: Column(children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-          _stat('Esperados',  '$total',             Colors.blue.shade700),
-          _stat('Escaneados', '$escaneados',         Colors.green.shade700),
+          _stat('Esperados',  '$total',             Colors.blue),
+          _stat('Escaneados', '$escaneados',         Colors.green),
           _stat('Faltantes',  '${_faltantes.length}',
-              _faltantes.isEmpty ? Colors.green.shade700 : Colors.red.shade700),
+              _faltantes.isEmpty ? Colors.green : Colors.red),
           _stat('Sobrantes',  '${_sobrantes.length}',
-              _sobrantes.isEmpty ? Colors.green.shade700 : Colors.orange.shade700),
+              _sobrantes.isEmpty ? Colors.green : Colors.orange),
         ]),
         const SizedBox(height: 8),
         ClipRRect(
@@ -273,23 +327,29 @@ class _VerificacionScreenState extends State<VerificacionScreen>
             value: pct, minHeight: 10,
             backgroundColor: Colors.red.shade100,
             valueColor: AlwaysStoppedAnimation(
-                pct >= 1.0 ? Colors.green.shade600 : Colors.blue.shade600),
+                pct >= 1.0 ? Colors.green.shade600
+                           : Colors.blue.shade600),
           ),
         ),
         const SizedBox(height: 4),
         Text('${(pct * 100).toStringAsFixed(1)}% completado',
             style: TextStyle(
                 fontSize: 12,
-                color: pct >= 1.0 ? Colors.green.shade700 : Colors.blue.shade700,
+                color: pct >= 1.0
+                    ? Colors.green.shade700
+                    : Colors.blue.shade700,
                 fontWeight: FontWeight.bold)),
       ]),
     );
   }
 
-  Widget _stat(String label, String value, Color color) => Column(children: [
-    Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
-    Text(label, style: const TextStyle(fontSize: 11, color: Colors.black54)),
-  ]);
+  Widget _stat(String label, String value, Color color) =>
+      Column(children: [
+        Text(value, style: TextStyle(
+            fontSize: 22, fontWeight: FontWeight.bold, color: color)),
+        Text(label, style: const TextStyle(
+            fontSize: 11, color: Colors.grey)),
+      ]);
 
   // ── Pestaña Faltantes ─────────────────────────────────────────────
 
@@ -301,7 +361,8 @@ class _VerificacionScreenState extends State<VerificacionScreen>
           Icon(Icons.check_circle, color: Colors.green, size: 64),
           SizedBox(height: 8),
           Text('¡Todo escaneado!', style: TextStyle(
-              fontSize: 18, color: Colors.green, fontWeight: FontWeight.bold)),
+              fontSize: 18, color: Colors.green,
+              fontWeight: FontWeight.bold)),
         ],
       ));
     }
@@ -311,7 +372,6 @@ class _VerificacionScreenState extends State<VerificacionScreen>
     );
   }
 
-  // Tarjeta faltante con botón de escaneo
   Widget _cardFaltante(ActivoTeorico a) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -322,47 +382,46 @@ class _VerificacionScreenState extends State<VerificacionScreen>
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // Info del activo
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
           Expanded(child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start, children: [
-            // CÓDIGO PRINCIPAL: anterior (5xxx) si existe, si no el nuevo
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
             Row(children: [
-              Icon(Icons.error_outline, color: Colors.red.shade700, size: 18),
+              Icon(Icons.error_outline,
+                  color: Colors.red.shade700, size: 18),
               const SizedBox(width: 6),
               Text(_codigoPrincipal(a),
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                      color: Colors.red.shade800)),
+                  style: TextStyle(fontWeight: FontWeight.bold,
+                      fontSize: 15, color: Colors.red.shade800)),
               if (_codigoSecundario(a).isNotEmpty) ...[
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: Colors.red.shade100,
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(_codigoSecundario(a),
                       style: TextStyle(
-                          color: Colors.red.shade700, fontSize: 11)),
+                          color: Colors.red.shade700,
+                          fontSize: 11)),
                 ),
               ],
             ]),
             const SizedBox(height: 4),
-            Text(a.descripcion,
-                style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
+            Text(a.descripcion, style: const TextStyle(
+                fontWeight: FontWeight.w500, fontSize: 13)),
             const SizedBox(height: 6),
             Wrap(spacing: 6, runSpacing: 4, children: [
-              if (a.marca.isNotEmpty)     _chip('Marca',        a.marca),
-              if (a.modelo.isNotEmpty)    _chip('Modelo',       a.modelo),
-              if (a.noSerie.isNotEmpty)   _chip('Serie',        a.noSerie),
-              if (a.nombre.isNotEmpty)    _chip('Responsable',  a.nombre),
-              if (a.empleado.isNotEmpty)  _chip('No. Emp.',     a.empleado),
-              if (a.resguardo.isNotEmpty) _chip('Resguardo',    a.resguardo),
+              if (a.marca.isNotEmpty)     _chip('Marca',    a.marca),
+              if (a.modelo.isNotEmpty)    _chip('Modelo',   a.modelo),
+              if (a.noSerie.isNotEmpty)   _chip('Serie',    a.noSerie),
+              if (a.nombre.isNotEmpty)    _chip('Resp.',    a.nombre),
+              if (a.resguardo.isNotEmpty) _chip('Resguardo', a.resguardo),
             ]),
           ])),
-          // Botón escanear este faltante
           const SizedBox(width: 8),
           GestureDetector(
             onTap: () => _escanearFaltante(a),
@@ -385,14 +444,14 @@ class _VerificacionScreenState extends State<VerificacionScreen>
 
   Widget _buildListaEscaneados() {
     if (_escaneados.isEmpty) {
-      return const Center(child: Text('Sin activos escaneados en esta ubicación',
+      return const Center(child: Text('Sin activos escaneados.',
           style: TextStyle(color: Colors.grey)));
     }
     return ListView.builder(
       itemCount: _escaneados.length,
-      itemBuilder: (_, i) => _cardActivo(_escaneados[i],
-          Colors.green.shade50, Colors.green.shade700,
-          Icons.check_circle_outline),
+      itemBuilder: (_, i) => _cardActivo(
+          _escaneados[i], Colors.green.shade50,
+          Colors.green.shade700, Icons.check_circle_outline),
     );
   }
 
@@ -400,32 +459,34 @@ class _VerificacionScreenState extends State<VerificacionScreen>
 
   Widget _buildListaSobrantes() {
     if (_sobrantes.isEmpty) {
-      return const Center(child: Text('Sin activos sobrantes',
+      return const Center(child: Text('Sin activos sobrantes.',
           style: TextStyle(color: Colors.grey)));
     }
     return ListView.builder(
       itemCount: _sobrantes.length,
       itemBuilder: (_, i) {
-        final r = _sobrantes[i];
+        final r      = _sobrantes[i];
         final activo = _teorico.buscarPorCodigo(r.cveActivo);
         if (activo != null) {
           return _cardActivo(activo, Colors.orange.shade50,
               Colors.orange.shade700, Icons.warning_amber_outlined);
         }
         return ListTile(
-          leading: Icon(Icons.help_outline, color: Colors.orange.shade700),
+          leading: Icon(Icons.help_outline,
+              color: Colors.orange.shade700),
           title: Text(r.cveActivo,
               style: const TextStyle(fontWeight: FontWeight.bold)),
-          subtitle: const Text('No encontrado en catálogo teórico'),
+          subtitle: const Text('No encontrado en catálogo'),
           tileColor: Colors.orange.shade50,
         );
       },
     );
   }
 
-  // ── Card genérico (escaneados y sobrantes) ────────────────────────
+  // ── Card genérico ─────────────────────────────────────────────────
 
-  Widget _cardActivo(ActivoTeorico a, Color bg, Color accent, IconData icon) {
+  Widget _cardActivo(ActivoTeorico a, Color bg, Color accent,
+      IconData icon) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       color: bg,
@@ -435,35 +496,33 @@ class _VerificacionScreenState extends State<VerificacionScreen>
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
             Icon(icon, color: accent, size: 18),
             const SizedBox(width: 8),
             Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start, children: [
-              // Código principal: anterior primero si existe
-              Text(_codigoPrincipal(a),
-                  style: TextStyle(fontWeight: FontWeight.bold,
-                      fontSize: 14, color: accent)),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+              Text(_codigoPrincipal(a), style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14, color: accent)),
               if (_codigoSecundario(a).isNotEmpty)
-                Text(_codigoSecundario(a),
-                    style: TextStyle(fontSize: 12, color: accent.withOpacity(0.7))),
-              Text(a.descripcion,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w500, fontSize: 13)),
+                Text(_codigoSecundario(a), style: TextStyle(
+                    fontSize: 12,
+                    color: accent.withOpacity(0.7))),
+              Text(a.descripcion, style: const TextStyle(
+                  fontWeight: FontWeight.w500, fontSize: 13)),
             ])),
           ]),
-          const SizedBox(height: 8),
-          const Divider(height: 1),
           const SizedBox(height: 6),
           Wrap(spacing: 6, runSpacing: 4, children: [
-            if (a.marca.isNotEmpty)     _chip('Marca',        a.marca),
-            if (a.modelo.isNotEmpty)    _chip('Modelo',       a.modelo),
-            if (a.noSerie.isNotEmpty)   _chip('Serie',        a.noSerie),
-            if (a.nombre.isNotEmpty)    _chip('Responsable',  a.nombre),
-            if (a.empleado.isNotEmpty)  _chip('No. Emp.',     a.empleado),
-            if (a.resguardo.isNotEmpty) _chip('Resguardo',    a.resguardo),
-            if (a.contrato.isNotEmpty)  _chip('Contrato',     a.contrato),
+            if (a.marca.isNotEmpty)     _chip('Marca',    a.marca),
+            if (a.modelo.isNotEmpty)    _chip('Modelo',   a.modelo),
+            if (a.noSerie.isNotEmpty)   _chip('Serie',    a.noSerie),
+            if (a.nombre.isNotEmpty)    _chip('Resp.',    a.nombre),
+            if (a.resguardo.isNotEmpty) _chip('Resguardo', a.resguardo),
           ]),
         ]),
       ),

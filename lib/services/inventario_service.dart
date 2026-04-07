@@ -2,6 +2,13 @@ import 'dart:io';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 
+// ── Tipos de registro ─────────────────────────────────────────────
+
+enum TipoActivo {
+  catalogado,      // encontrado en el catálogo (normal)
+  noCatalogado,    // escaneado pero no está en el catálogo
+}
+
 // ── Modelo de registro ────────────────────────────────────────────
 
 class RegistroInventario {
@@ -9,38 +16,67 @@ class RegistroInventario {
   final String cveActivo;
   final DateTime fecha;
   final String nota;
+  final TipoActivo tipo;
 
   RegistroInventario({
     required this.localizacion,
     required this.cveActivo,
     required this.fecha,
     this.nota = '',
+    this.tipo = TipoActivo.catalogado,
   });
 
-  // Formato SIGA: siempre LOCALIZACION_CVEACTIVO_FECHA (sin nota)
+  // Formato SIGA limpio (sin nota, sin tipo)
   String toLineTxt() {
     final fechaStr = DateFormat('dd/MM/yyyy').format(fecha);
     return '${localizacion}_${cveActivo}_$fechaStr';
   }
 
-  // Formato completo con nota — solo para archivos internos y Excel
+  // Formato completo interno (con nota y tipo)
   String toLineCompleto() {
     final fechaStr = DateFormat('dd/MM/yyyy').format(fecha);
-    final base = '${localizacion}_${cveActivo}_$fechaStr';
-    return nota.isNotEmpty ? '${base}_$nota' : base;
+    final tipoStr  = tipo == TipoActivo.noCatalogado ? 'NC' : 'OK';
+    final base     = '${localizacion}_${cveActivo}_$fechaStr';
+    final conTipo  = '${base}_T:$tipoStr';
+    return nota.isNotEmpty ? '${conTipo}_N:$nota' : conTipo;
   }
 
   static RegistroInventario? fromLine(String line) {
-    final parts = line.trim().replaceAll('\r', '').split('_');
+    final l = line.trim().replaceAll('\r', '');
+    if (l.isEmpty) return null;
+
+    final parts = l.split('_');
     if (parts.length < 3) return null;
+
     try {
-      final fecha = DateFormat('dd/MM/yyyy').parse(parts[2]);
-      final nota  = parts.length >= 4 ? parts.sublist(3).join('_') : '';
+      final localizacion = parts[0];
+      final cveActivo    = parts[1];
+      final fecha        = DateFormat('dd/MM/yyyy').parse(parts[2]);
+
+      // Parsear campos extra (T:OK/NC, N:nota)
+      String nota = '';
+      TipoActivo tipo = TipoActivo.catalogado;
+
+      for (int i = 3; i < parts.length; i++) {
+        if (parts[i].startsWith('T:')) {
+          tipo = parts[i] == 'T:NC'
+              ? TipoActivo.noCatalogado
+              : TipoActivo.catalogado;
+        } else if (parts[i].startsWith('N:')) {
+          nota = parts[i].substring(2);
+        } else {
+          // Compatibilidad con formato anterior (nota sin prefijo N:)
+          nota = parts.sublist(i).join('_');
+          break;
+        }
+      }
+
       return RegistroInventario(
-        localizacion: parts[0],
-        cveActivo:    parts[1],
+        localizacion: localizacion,
+        cveActivo:    cveActivo,
         fecha:        fecha,
         nota:         nota,
+        tipo:         tipo,
       );
     } catch (_) {
       return null;
@@ -54,7 +90,7 @@ class SesionInventario {
   final String id;
   final DateTime inicio;
   final List<RegistroInventario> registros;
-  final bool esActual; // true = sesión activa en curso
+  final bool esActual;
 
   SesionInventario({
     required this.id,
@@ -63,11 +99,15 @@ class SesionInventario {
     this.esActual = false,
   });
 
-  String get nombreArchivo => esActual ? 'ALM_Inventarios.txt' : 'Inventario_$id.txt';
+  String get nombreArchivo => esActual
+      ? 'ALM_Inventarios.txt'
+      : 'Inventario_$id.txt';
   String get fechaLegible  => esActual
       ? 'Hoy ${DateFormat("dd/MM/yyyy").format(inicio)}'
       : DateFormat('dd/MM/yyyy').format(inicio);
   int    get total         => registros.length;
+  int    get noCatalogados =>
+      registros.where((r) => r.tipo == TipoActivo.noCatalogado).length;
 }
 
 // ── Servicio principal ────────────────────────────────────────────
@@ -79,8 +119,7 @@ class InventarioService {
 
   static const String _carpeta       = 'ALM_Inventario';
   static const String _archivoActual = 'ALM_Inventarios.txt';
-
-  // ── Directorio base ───────────────────────────────────────────────
+  static const String _idActual      = 'ACTUAL';
 
   Future<Directory> get _dir async {
     final base = await getExternalStorageDirectory() ??
@@ -114,16 +153,10 @@ class InventarioService {
     }
   }
 
-  /// Agrega el registro al archivo activo Y al archivo de sesión del día.
-  /// Archivo activo usa toLineCompleto (preserva nota para leer de vuelta).
-  /// El TXT que se comparte con SIGA usa toLineTxt() (sin nota).
   Future<void> agregarRegistro(RegistroInventario r) async {
-    // 1 — Archivo activo con nota (para leer de vuelta correctamente)
     final activo = await _archivoActualFile;
     await activo.writeAsString('${r.toLineCompleto()}\n',
         mode: FileMode.append);
-
-    // 2 — Archivo de sesión del día (también con nota)
     await _agregarASesionDelDia(r);
   }
 
@@ -134,9 +167,7 @@ class InventarioService {
       final file = File('${d.path}/Inventario_$hoy.txt');
       await file.writeAsString('${r.toLineCompleto()}\n',
           mode: FileMode.append);
-    } catch (_) {
-      // Si falla el guardado secundario, no interrumpir el flujo
-    }
+    } catch (_) {}
   }
 
   Future<void> borrarArchivo() async {
@@ -144,17 +175,14 @@ class InventarioService {
     if (await file.exists()) await file.delete();
   }
 
-  // ── Historial de sesiones ─────────────────────────────────────────
-  // Muestra: 1) sesión activa actual  2) sesiones por día anteriores
-
-  static const String _idActual = 'ACTUAL';
+  // ── Historial ─────────────────────────────────────────────────────
 
   Future<List<SesionInventario>> cargarHistorial() async {
     try {
       final d       = await _dir;
       final sesiones = <SesionInventario>[];
 
-      // ── 1. Sesión activa (ALM_Inventarios.txt) — siempre primero ──
+      // 1. Sesión activa siempre primero
       final archivoActivo = File('${d.path}/$_archivoActual');
       if (await archivoActivo.exists()) {
         final lines = await archivoActivo.readAsLines();
@@ -164,15 +192,15 @@ class InventarioService {
             .toList();
         if (regs.isNotEmpty) {
           sesiones.add(SesionInventario(
-            id:       _idActual,
-            inicio:   DateTime.now(),
+            id:        _idActual,
+            inicio:    DateTime.now(),
             registros: regs,
-            esActual: true,
+            esActual:  true,
           ));
         }
       }
 
-      // ── 2. Sesiones por día (Inventario_yyyyMMdd.txt) ─────────────
+      // 2. Sesiones anteriores por día
       final archivos = d
           .listSync()
           .whereType<File>()
@@ -185,15 +213,13 @@ class InventarioService {
           .toList();
 
       archivos.sort((a, b) => b.path.compareTo(a.path));
+      final hoy = DateFormat('yyyyMMdd').format(DateTime.now());
 
       for (final file in archivos) {
         final nombre = file.uri.pathSegments.last;
         final id     = nombre
             .replaceFirst('Inventario_', '')
             .replaceAll('.txt', '');
-
-        // Saltar si es la sesión del día actual (ya está en el activo)
-        final hoy = DateFormat('yyyyMMdd').format(DateTime.now());
         if (id == hoy) continue;
 
         DateTime inicio;
@@ -211,9 +237,7 @@ class InventarioService {
 
         if (regs.isNotEmpty) {
           sesiones.add(SesionInventario(
-            id:        id,
-            inicio:    inicio,
-            registros: regs,
+            id: id, inicio: inicio, registros: regs,
           ));
         }
       }
@@ -234,15 +258,16 @@ class InventarioService {
     return '${d.path}/Inventario_$id.txt';
   }
 
-  /// Genera un TXT limpio SIN notas para subir al SIGA.
-  /// Formato: LOCALIZACION_CVEACTIVO_FECHA (una línea por registro)
-  Future<String> exportarTxtSiga(List<RegistroInventario> registros) async {
+  // ── TXT limpio para SIGA (sin notas, sin tipo) ────────────────────
+
+  Future<String> exportarTxtSiga(
+      List<RegistroInventario> registros) async {
     final d        = await _dir;
     final fechaStr = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
     final file     = File('${d.path}/SIGA_$fechaStr.txt');
     final buf      = StringBuffer();
     for (final r in registros) {
-      buf.writeln(r.toLineTxt()); // sin nota
+      buf.writeln(r.toLineTxt());
     }
     await file.writeAsString(buf.toString());
     return file.path;
