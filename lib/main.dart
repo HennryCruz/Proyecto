@@ -73,7 +73,7 @@ class _InventarioCENAMAppState extends State<InventarioCENAMApp> {
           foregroundColor: Colors.white,
           elevation: 2,
         ),
-        cardTheme: const CardTheme(
+        cardTheme: const CardThemeData(
           color: Color(0xFF1E1E1E),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
