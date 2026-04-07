@@ -134,23 +134,39 @@ class _HistorialScreenState extends State<HistorialScreen> {
   }
 
   Widget _buildLista() {
+    // Separar sesión activa de las históricas para el conteo
+    final sesActual    = _sesiones.where((s) => s.esActual).length;
+    final sesHistorico = _sesiones.length - sesActual;
+
     return Column(children: [
+      // Banner guardado automático
+      Container(
+        color: Colors.green.shade50,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(children: [
+          Icon(Icons.sync, size: 16, color: Colors.green.shade700),
+          const SizedBox(width: 8),
+          Expanded(child: Text(
+            'Guardado automático activo — cada escaneo se guarda al instante.',
+            style: TextStyle(fontSize: 12, color: Colors.green.shade700),
+          )),
+        ]),
+      ),
       // Cabecera resumen
       Container(
         color: Colors.grey.shade100,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('${_sesiones.length} sesiones guardadas',
-                style: const TextStyle(fontWeight: FontWeight.bold)),
-            Text(
-              'Total: ${_sesiones.fold(0, (s, e) => s + e.total)} registros',
-              style: TextStyle(color: Colors.blue.shade800,
-                  fontWeight: FontWeight.w500),
-            ),
-          ],
-        ),
+        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text(
+            sesHistorico > 0
+                ? '$sesHistorico sesión${sesHistorico == 1 ? "" : "es"} anteriores'
+                : 'Sin sesiones anteriores',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(
+            'Total: ${_sesiones.fold(0, (s, e) => s + e.total)} registros',
+            style: TextStyle(color: Colors.blue.shade800,
+                fontWeight: FontWeight.w500)),
+        ]),
       ),
       Expanded(
         child: ListView.builder(
@@ -162,48 +178,69 @@ class _HistorialScreenState extends State<HistorialScreen> {
   }
 
   Widget _cardSesion(SesionInventario s) {
-    // Desglose rápido: cuántas localizaciones distintas
-    final locs = s.registros.map((r) => r.localizacion).toSet();
+    final locs      = s.registros.map((r) => r.localizacion).toSet();
+    final conNota   = s.registros.where((r) => r.nota.isNotEmpty).length;
+
+    // Estilo diferente para sesión activa
+    final cardColor  = s.esActual ? Colors.green.shade50 : Colors.white;
+    final headerColor = s.esActual
+        ? Colors.green.shade700
+        : const Color(0xFF1B4F8A);
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: s.esActual
+            ? BorderSide(color: Colors.green.shade400, width: 1.5)
+            : BorderSide.none,
+      ),
+      color: cardColor,
+      elevation: s.esActual ? 3 : 2,
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // Encabezado: fecha + hora
+
+          // Badge "SESIÓN ACTIVA" si corresponde
+          if (s.esActual) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.green.shade600,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.circle, color: Colors.white, size: 8),
+                SizedBox(width: 6),
+                Text('SESIÓN EN CURSO',
+                    style: TextStyle(color: Colors.white,
+                        fontSize: 11, fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5)),
+              ]),
+            ),
+            const SizedBox(height: 10),
+          ],
+
+          // Encabezado: fecha + info
           Row(children: [
             Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 10, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: const Color(0xFF1B4F8A),
+                color: headerColor,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Column(children: [
-        // Banner guardado automático
-        Container(
-          color: Colors.blue.shade50,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(children: [
-            Icon(Icons.info_outline, size: 16, color: Colors.blue.shade700),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Las sesiones se guardan automáticamente cada día.',
-                style: TextStyle(fontSize: 12, color: Colors.blue.shade700),
-              ),
-            ),
-          ]),
-        ),
-                Text(_fechaCorta(s.inicio),
-                    style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold,
-                        fontSize: 13)),
-                Text(_hora(s.inicio),
-                    style: const TextStyle(
-                        color: Colors.white70, fontSize: 11)),
+                Text(
+                  s.esActual ? 'HOY' : _fechaCorta(s.inicio),
+                  style: const TextStyle(color: Colors.white,
+                      fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                Text(
+                  s.esActual
+                      ? DateFormat('dd/MM/yyyy').format(s.inicio)
+                      : _hora(s.inicio),
+                  style: const TextStyle(color: Colors.white70, fontSize: 11),
+                ),
               ]),
             ),
             const SizedBox(width: 12),
@@ -215,11 +252,15 @@ class _HistorialScreenState extends State<HistorialScreen> {
               Text(
                 '${locs.length} ubicación${locs.length == 1 ? "" : "es"}: '
                 '${locs.take(3).join(", ")}${locs.length > 3 ? "..." : ""}',
-                style: const TextStyle(
-                    color: Colors.black54, fontSize: 12),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.black54, fontSize: 12),
+                maxLines: 2, overflow: TextOverflow.ellipsis,
               ),
+              if (conNota > 0)
+                Text('$conNota nota${conNota == 1 ? "" : "s"} registradas',
+                    style: TextStyle(
+                        color: Colors.purple.shade600,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500)),
             ])),
           ]),
 
@@ -229,11 +270,10 @@ class _HistorialScreenState extends State<HistorialScreen> {
 
           // Botones de acción
           Row(children: [
-            // TXT
             Expanded(child: OutlinedButton.icon(
               onPressed: () => _compartirTxt(s),
               icon: const Icon(Icons.description_outlined, size: 18),
-              label: const Text('TXT', style: TextStyle(fontSize: 13)),
+              label: const Text('TXT (SIGA)', style: TextStyle(fontSize: 12)),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.blue.shade700,
                 side: BorderSide(color: Colors.blue.shade300),
@@ -241,11 +281,10 @@ class _HistorialScreenState extends State<HistorialScreen> {
               ),
             )),
             const SizedBox(width: 8),
-            // Excel
             Expanded(child: OutlinedButton.icon(
               onPressed: () => _exportarExcel(s),
               icon: const Icon(Icons.table_chart_outlined, size: 18),
-              label: const Text('Excel', style: TextStyle(fontSize: 13)),
+              label: const Text('Excel', style: TextStyle(fontSize: 12)),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.green.shade700,
                 side: BorderSide(color: Colors.green.shade300),
@@ -253,12 +292,15 @@ class _HistorialScreenState extends State<HistorialScreen> {
               ),
             )),
             const SizedBox(width: 8),
-            // Eliminar
-            IconButton(
-              icon: Icon(Icons.delete_outline, color: Colors.red.shade400),
-              onPressed: () => _eliminar(s),
-              tooltip: 'Eliminar sesión',
-            ),
+            // Eliminar solo para sesiones pasadas, no la activa
+            if (!s.esActual)
+              IconButton(
+                icon: Icon(Icons.delete_outline, color: Colors.red.shade400),
+                onPressed: () => _eliminar(s),
+                tooltip: 'Eliminar sesión',
+              )
+            else
+              const SizedBox(width: 48),
           ]),
         ]),
       ),

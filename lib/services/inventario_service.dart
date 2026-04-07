@@ -51,20 +51,23 @@ class RegistroInventario {
 // ── Modelo de sesión ──────────────────────────────────────────────
 
 class SesionInventario {
-  final String id;          // yyyyMMdd — una sesión por día
+  final String id;
   final DateTime inicio;
   final List<RegistroInventario> registros;
+  final bool esActual; // true = sesión activa en curso
 
   SesionInventario({
     required this.id,
     required this.inicio,
     required this.registros,
+    this.esActual = false,
   });
 
-  String get nombreArchivo  => 'Inventario_$id.txt';
-  String get fechaLegible   =>
-      DateFormat('dd/MM/yyyy').format(inicio);
-  int    get total          => registros.length;
+  String get nombreArchivo => esActual ? 'ALM_Inventarios.txt' : 'Inventario_$id.txt';
+  String get fechaLegible  => esActual
+      ? 'Hoy ${DateFormat("dd/MM/yyyy").format(inicio)}'
+      : DateFormat('dd/MM/yyyy').format(inicio);
+  int    get total         => registros.length;
 }
 
 // ── Servicio principal ────────────────────────────────────────────
@@ -142,11 +145,34 @@ class InventarioService {
   }
 
   // ── Historial de sesiones ─────────────────────────────────────────
-  // Lee todos los archivos Inventario_yyyyMMdd.txt del directorio
+  // Muestra: 1) sesión activa actual  2) sesiones por día anteriores
+
+  static const String _idActual = 'ACTUAL';
 
   Future<List<SesionInventario>> cargarHistorial() async {
     try {
-      final d = await _dir;
+      final d       = await _dir;
+      final sesiones = <SesionInventario>[];
+
+      // ── 1. Sesión activa (ALM_Inventarios.txt) — siempre primero ──
+      final archivoActivo = File('${d.path}/$_archivoActual');
+      if (await archivoActivo.exists()) {
+        final lines = await archivoActivo.readAsLines();
+        final regs  = lines
+            .map(RegistroInventario.fromLine)
+            .whereType<RegistroInventario>()
+            .toList();
+        if (regs.isNotEmpty) {
+          sesiones.add(SesionInventario(
+            id:       _idActual,
+            inicio:   DateTime.now(),
+            registros: regs,
+            esActual: true,
+          ));
+        }
+      }
+
+      // ── 2. Sesiones por día (Inventario_yyyyMMdd.txt) ─────────────
       final archivos = d
           .listSync()
           .whereType<File>()
@@ -158,15 +184,17 @@ class InventarioService {
           })
           .toList();
 
-      // Más reciente primero
       archivos.sort((a, b) => b.path.compareTo(a.path));
 
-      final sesiones = <SesionInventario>[];
       for (final file in archivos) {
         final nombre = file.uri.pathSegments.last;
         final id     = nombre
             .replaceFirst('Inventario_', '')
             .replaceAll('.txt', '');
+
+        // Saltar si es la sesión del día actual (ya está en el activo)
+        final hoy = DateFormat('yyyyMMdd').format(DateTime.now());
+        if (id == hoy) continue;
 
         DateTime inicio;
         try {
