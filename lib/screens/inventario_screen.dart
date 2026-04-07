@@ -549,7 +549,9 @@ class _InventarioScreenState extends State<InventarioScreen> {
       // Banner de estado de carga
       if (!_cargando && !_errorCarga)
         Container(
-          color: Colors.green.shade50,
+          color: Theme.of(context).brightness == Brightness.dark
+              ? Colors.green.shade900.withOpacity(0.4)
+              : Colors.green.shade50,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: Row(children: [
             Icon(Icons.check_circle, color: Colors.green.shade600, size: 14),
@@ -566,7 +568,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   Widget _buildPanelLocalizacion() {
     return Container(
-      color: Colors.grey.shade100,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
@@ -610,8 +612,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
       constraints: const BoxConstraints(maxHeight: 200),
       margin: const EdgeInsets.only(top: 2),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.grey.shade300),
+        color: Theme.of(context).colorScheme.surface,
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
         borderRadius: BorderRadius.circular(6),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08),
             blurRadius: 6, offset: const Offset(0, 2))],
@@ -627,10 +629,13 @@ class _InventarioScreenState extends State<InventarioScreen> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: RichText(text: TextSpan(
-                style: const TextStyle(color: Colors.black87, fontSize: 13),
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                    fontSize: 13),
                 children: [
-                  TextSpan(text: clave, style: const TextStyle(
-                      fontWeight: FontWeight.bold, color: Color(0xFF1B4F8A))),
+                  TextSpan(text: clave, style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.primary)),
                   TextSpan(text: '  $desc'),
                 ],
               )),
@@ -664,16 +669,18 @@ class _InventarioScreenState extends State<InventarioScreen> {
         final tieneNota  = r.nota.isNotEmpty;
         final esNC       = r.tipo == TipoActivo.noCatalogado;
 
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+
         // Prioridad de color: nota > no-catalogado > duplicado
         Color? tileColor;
         if (tieneNota && esDup) {
-          tileColor = Colors.purple.shade50;
+          tileColor = isDark ? Colors.purple.shade900.withOpacity(0.4) : Colors.purple.shade50;
         } else if (tieneNota) {
-          tileColor = Colors.purple.shade50;
+          tileColor = isDark ? Colors.purple.shade900.withOpacity(0.4) : Colors.purple.shade50;
         } else if (esNC) {
-          tileColor = Colors.amber.shade50;
+          tileColor = isDark ? Colors.amber.shade900.withOpacity(0.3) : Colors.amber.shade50;
         } else if (esDup) {
-          tileColor = Colors.orange.shade50;
+          tileColor = isDark ? Colors.orange.shade900.withOpacity(0.3) : Colors.orange.shade50;
         }
 
         return Dismissible(
@@ -967,7 +974,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
     }
 
     return Container(
-      color: Colors.grey.shade50,
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
       child: Column(children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
