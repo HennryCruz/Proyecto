@@ -3,7 +3,7 @@ name: Build APK - Inventario CENAM
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:  # Permite lanzarlo manualmente desde GitHub
+  workflow_dispatch:
 
 jobs:
   build:
@@ -39,3 +39,6 @@ jobs:
           name: inventario-cenam-debug
           path: build/app/outputs/flutter-apk/app-debug.apk
           retention-days: 30
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
