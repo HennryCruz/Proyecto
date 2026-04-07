@@ -218,36 +218,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
     return aa.codigoNuevo == bb.codigoNuevo;
   }
 
-  // ── Nota al escanear ──────────────────────────────────────────────
-
-  Future<String?> _pedirNota() async {
-    final ctrl = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Agregar nota (opcional)'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          maxLength: 80,
-          decoration: const InputDecoration(
-            hintText: 'Ej: dañado, sin etiqueta, ubicación incorrecta...',
-            border: OutlineInputBorder(),
-          ),
-          onSubmitted: (v) => Navigator.pop(context, v.trim()),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, ''),
-              child: const Text('Sin nota')),
-          ElevatedButton(
-              onPressed: () => Navigator.pop(context, ctrl.text.trim()),
-              child: const Text('Guardar')),
-        ],
-      ),
-    );
-  }
-
   // ── Eliminar registro ─────────────────────────────────────────────
 
   Future<void> _eliminarRegistro(int index) async {
@@ -360,10 +330,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
       builder: (_) => ManualEntryDialog(cveLocalizacion: _cveLocalizacion!),
     );
     if (result == null || result.isEmpty) return;
-
-    // Preguntar nota
-    final nota = await _pedirNota() ?? '';
-    await _insertarActivo(result, nota: nota);
+    await _insertarActivo(result);
   }
 
   // ── Borrar todo ───────────────────────────────────────────────────
