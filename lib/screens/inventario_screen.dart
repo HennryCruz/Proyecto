@@ -267,41 +267,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
     }
   }
 
-  // ── Guardar sesión ────────────────────────────────────────────────
-
-  Future<void> _guardarSesion() async {
-    if (_registros.isEmpty) {
-      _mostrarError('No hay registros que guardar');
-      return;
-    }
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Guardar sesión'),
-        content: Text(
-            '¿Guardar los ${_registros.length} registros como una sesión '
-            'en el historial?\n\nPodrás exportarla a TXT o Excel desde Historial.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Guardar'),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true) return;
-
-    await _inventario.guardarSesion(_registros);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text('✓ Sesión guardada en el historial'),
-        backgroundColor: Colors.green.shade700,
-      ));
-    }
-  }
-
   // ── Exportar Excel sesión activa ──────────────────────────────────
 
   Future<void> _exportarExcel() async {
