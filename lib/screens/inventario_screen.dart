@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:vibration/vibration.dart';
 
 import '../services/catalogo_service.dart';
+import '../services/excel_service.dart';
 import '../services/inventario_service.dart';
 import '../services/teorico_service.dart';
 import '../widgets/manual_entry_dialog.dart';
-import 'verificacion_screen.dart';
 import 'checklist_screen.dart';
 import 'dashboard_screen.dart';
+import 'historial_screen.dart';
+import 'verificacion_screen.dart';
 
 class InventarioScreen extends StatefulWidget {
   const InventarioScreen({super.key});
@@ -21,8 +24,13 @@ class _InventarioScreenState extends State<InventarioScreen> {
   final _catalogo   = CatalogoService();
   final _inventario = InventarioService();
   final _teorico    = TeoricoService();
+  final _excel      = ExcelService();
 
   bool _cargando = true;
+  // Estado de carga detallado para pantalla de inicio
+  String _estadoCarga = 'Iniciando...';
+  bool   _errorCarga  = false;
+
   List<RegistroInventario> _registros = [];
   final Set<String> _escaneadosEnSesion = {};
 
@@ -39,6 +47,9 @@ class _InventarioScreenState extends State<InventarioScreen> {
   bool   _esDuplicadoVisor  = false;
   bool   _noEncontrado      = false;
 
+  // Vibración disponible
+  bool _vibracionDisponible = false;
+
   @override
   void initState() {
     super.initState();
@@ -46,14 +57,38 @@ class _InventarioScreenState extends State<InventarioScreen> {
   }
 
   Future<void> _init() async {
-    await Future.wait([_catalogo.cargar(), _teorico.cargar()]);
-    final regs = await _inventario.cargarRegistros();
-    if (mounted) {
-      setState(() {
-        _registros = regs;
-        for (final r in regs) _escaneadosEnSesion.add(r.cveActivo.toUpperCase());
-        _cargando = false;
-      });
+    try {
+      setState(() => _estadoCarga = 'Cargando catálogo de localizaciones...');
+      await _catalogo.cargar();
+
+      setState(() => _estadoCarga = 'Cargando catálogo de activos...');
+      await _teorico.cargar();
+
+      setState(() => _estadoCarga = 'Leyendo registros anteriores...');
+      final regs = await _inventario.cargarRegistros();
+
+      // Verificar vibración
+      _vibracionDisponible = await Vibration.hasVibrator() ?? false;
+
+      if (mounted) {
+        setState(() {
+          _registros = regs;
+          for (final r in regs) {
+            _escaneadosEnSesion.add(r.cveActivo.toUpperCase());
+          }
+          _estadoCarga = 'Listo: ${_catalogo.totalLocalizaciones} locs · '
+              '${_catalogo.totalActivos} activos';
+          _cargando = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorCarga  = true;
+          _estadoCarga = 'Error al cargar: $e';
+          _cargando    = false;
+        });
+      }
     }
   }
 
@@ -62,6 +97,19 @@ class _InventarioScreenState extends State<InventarioScreen> {
     _scannerCtrl?.dispose();
     _locCtrl.dispose();
     super.dispose();
+  }
+
+  // ── Vibrar ────────────────────────────────────────────────────────
+
+  void _vibrar({bool error = false, bool duplicado = false}) {
+    if (!_vibracionDisponible) return;
+    if (error) {
+      Vibration.vibrate(pattern: [0, 100, 80, 100]); // doble pulso = error
+    } else if (duplicado) {
+      Vibration.vibrate(pattern: [0, 200, 100, 200]); // triple largo = dup
+    } else {
+      Vibration.vibrate(duration: 80); // pulso corto = OK
+    }
   }
 
   // ── Localización ─────────────────────────────────────────────────
@@ -96,7 +144,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
   // ── Insertar activo ───────────────────────────────────────────────
 
   Future<void> _insertarActivo(String codigoEscaneado,
-      {String? localizacionForzada}) async {
+      {String? localizacionForzada, String nota = ''}) async {
     final loc = localizacionForzada ?? _cveLocalizacion;
     if (loc == null) {
       _mostrarError('Selecciona una localización primero');
@@ -107,6 +155,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
     final display    = codigoEscaneado.trim();
 
     if (desc.isEmpty) {
+      _vibrar(error: true);
       setState(() {
         _codigoMostrado   = display;
         _descMostrada     = 'No encontrado en catálogo';
@@ -123,15 +172,26 @@ class _InventarioScreenState extends State<InventarioScreen> {
       _esDuplicadoVisor = duplicado;
       _noEncontrado     = false;
     });
-    if (duplicado) return;
+
+    if (duplicado) {
+      _vibrar(duplicado: true);
+      return;
+    }
+
+    _vibrar(); // Pulso corto = registro exitoso
 
     final reg = RegistroInventario(
-        localizacion: loc, cveActivo: cveInterno, fecha: DateTime.now());
+      localizacion: loc,
+      cveActivo:    cveInterno,
+      fecha:        DateTime.now(),
+      nota:         nota,
+    );
     await _inventario.agregarRegistro(reg);
     setState(() {
       _registros.add(reg);
       _escaneadosEnSesion.add(cveInterno.toUpperCase());
     });
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('✓ $display  $desc'),
@@ -158,6 +218,36 @@ class _InventarioScreenState extends State<InventarioScreen> {
     return aa.codigoNuevo == bb.codigoNuevo;
   }
 
+  // ── Nota al escanear ──────────────────────────────────────────────
+
+  Future<String?> _pedirNota() async {
+    final ctrl = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Agregar nota (opcional)'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLength: 80,
+          decoration: const InputDecoration(
+            hintText: 'Ej: dañado, sin etiqueta, ubicación incorrecta...',
+            border: OutlineInputBorder(),
+          ),
+          onSubmitted: (v) => Navigator.pop(context, v.trim()),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, ''),
+              child: const Text('Sin nota')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(context, ctrl.text.trim()),
+              child: const Text('Guardar')),
+        ],
+      ),
+    );
+  }
+
   // ── Eliminar registro ─────────────────────────────────────────────
 
   Future<void> _eliminarRegistro(int index) async {
@@ -165,13 +255,70 @@ class _InventarioScreenState extends State<InventarioScreen> {
     await _inventario.borrarArchivo();
     for (final r in _registros) await _inventario.agregarRegistro(r);
     _escaneadosEnSesion.clear();
-    for (final r in _registros) _escaneadosEnSesion.add(r.cveActivo.toUpperCase());
+    for (final r in _registros) {
+      _escaneadosEnSesion.add(r.cveActivo.toUpperCase());
+    }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Registro eliminado'),
         backgroundColor: Colors.red,
         duration: Duration(seconds: 2),
       ));
+    }
+  }
+
+  // ── Guardar sesión ────────────────────────────────────────────────
+
+  Future<void> _guardarSesion() async {
+    if (_registros.isEmpty) {
+      _mostrarError('No hay registros que guardar');
+      return;
+    }
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Guardar sesión'),
+        content: Text(
+            '¿Guardar los ${_registros.length} registros como una sesión '
+            'en el historial?\n\nPodrás exportarla a TXT o Excel desde Historial.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    await _inventario.guardarSesion(_registros);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('✓ Sesión guardada en el historial'),
+        backgroundColor: Colors.green.shade700,
+      ));
+    }
+  }
+
+  // ── Exportar Excel sesión activa ──────────────────────────────────
+
+  Future<void> _exportarExcel() async {
+    if (_registros.isEmpty) {
+      _mostrarError('No hay registros para exportar');
+      return;
+    }
+    _mostrarSnack('Generando Excel...', color: Colors.blue.shade700);
+    try {
+      await _excel.exportarYCompartir(
+        registros: _registros,
+        titulo: 'Inventario CENAM — '
+            '${DateFormat("dd/MM/yyyy HH:mm").format(DateTime.now())} '
+            '(${_registros.length} registros)',
+      );
+    } catch (e) {
+      if (mounted) _mostrarError('Error al generar Excel: $e');
     }
   }
 
@@ -182,8 +329,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
       _mostrarError('Selecciona una localización primero');
       return;
     }
-    final teoricos = _teorico.activosDe(_cveLocalizacion!);
-    if (teoricos.isEmpty) {
+    if (_teorico.activosDe(_cveLocalizacion!).isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('No hay activos teóricos para $_cveLocalizacion'),
         backgroundColor: Colors.orange.shade700,
@@ -200,19 +346,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
     )).then((_) => setState(() {}));
   }
 
-  // ── Ir a checklist ────────────────────────────────────────────────
-
-  void _abrirChecklist() {
-    Navigator.push(context, MaterialPageRoute(
-      builder: (_) => ChecklistScreen(
-        registros: _registros,
-        onActivoEscaneado: (codigo, loc) =>
-            _insertarActivo(codigo, localizacionForzada: loc),
-      ),
-    )).then((_) => setState(() {}));
-  }
-
-  // ── Escáner mejorado ──────────────────────────────────────────────
+  // ── Escáner ───────────────────────────────────────────────────────
 
   void _abrirEscaner() {
     if (_cveLocalizacion == null) {
@@ -225,31 +359,17 @@ class _InventarioScreenState extends State<InventarioScreen> {
       _descMostrada     = '';
       _esDuplicadoVisor = false;
       _noEncontrado     = false;
-      _scannerCtrl      = _crearControladorEscaner();
+      _scannerCtrl      = MobileScannerController(
+        detectionSpeed: DetectionSpeed.normal,
+        formats: const [
+          BarcodeFormat.code128, BarcodeFormat.code39,
+          BarcodeFormat.ean13,   BarcodeFormat.ean8,
+          BarcodeFormat.itf,     BarcodeFormat.codabar,
+          BarcodeFormat.dataMatrix, BarcodeFormat.qrCode,
+        ],
+        autoStart: true,
+      );
     });
-  }
-
-  /// Controlador con configuración optimizada para Code 128B deteriorado
-  MobileScannerController _crearControladorEscaner() {
-    return MobileScannerController(
-      // noDuplicates pero con ventana de tiempo mayor para etiquetas difíciles
-      detectionSpeed: DetectionSpeed.normal,
-      // Habilitar explícitamente los formatos relevantes
-      formats: const [
-        BarcodeFormat.code128,  // Código principal (Ixxxxx y Cxxxxx)
-        BarcodeFormat.code39,
-        BarcodeFormat.ean13,    // Código anterior (5xxxxxxxxxxx)
-        BarcodeFormat.ean8,
-        BarcodeFormat.itf,
-        BarcodeFormat.codabar,
-        BarcodeFormat.dataMatrix,
-        BarcodeFormat.qrCode,
-      ],
-      // Torch automático para etiquetas en lugares oscuros
-      torchEnabled: false,
-      // Auto enfoque continuo — clave para etiquetas deterioradas
-      autoStart: true,
-    );
   }
 
   void _cerrarEscaner() {
@@ -263,11 +383,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
     if (codigo != null && codigo.isNotEmpty) _insertarActivo(codigo);
   }
 
-  void _toggleLinterna() {
-    _scannerCtrl?.toggleTorch();
-  }
-
-  // ── Registro manual ───────────────────────────────────────────────
+  // ── Registro manual con nota ──────────────────────────────────────
 
   Future<void> _registrarManual() async {
     if (_cveLocalizacion == null) {
@@ -278,15 +394,22 @@ class _InventarioScreenState extends State<InventarioScreen> {
       context: context,
       builder: (_) => ManualEntryDialog(cveLocalizacion: _cveLocalizacion!),
     );
-    if (result != null && result.isNotEmpty) await _insertarActivo(result);
+    if (result == null || result.isEmpty) return;
+
+    // Preguntar nota
+    final nota = await _pedirNota() ?? '';
+    await _insertarActivo(result, nota: nota);
   }
+
+  // ── Borrar todo ───────────────────────────────────────────────────
 
   Future<void> _borrarArchivo() async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Confirmar'),
-        content: const Text('¿Borrar todo el archivo de inventario?'),
+        content: const Text('¿Borrar el archivo activo de inventario?\n\n'
+            'Los datos del día ya están guardados automáticamente en el historial.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false),
               child: const Text('Cancelar')),
@@ -306,14 +429,15 @@ class _InventarioScreenState extends State<InventarioScreen> {
     }
   }
 
-  Future<void> _compartirArchivo() async {
-    final ruta = await _inventario.rutaArchivo;
-    await Share.shareXFiles([XFile(ruta)], subject: 'ALM_Inventarios.txt');
-  }
-
   void _mostrarError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(msg), backgroundColor: Colors.red.shade700));
+  }
+
+  void _mostrarSnack(String msg, {Color? color}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: color,
+            duration: const Duration(seconds: 2)));
   }
 
   // ── Build ─────────────────────────────────────────────────────────
@@ -324,34 +448,130 @@ class _InventarioScreenState extends State<InventarioScreen> {
       appBar: AppBar(
         title: const Text('Inventario CENAM'),
         actions: [
-          // Dashboard de progreso
-          IconButton(
-            icon: const Icon(Icons.bar_chart),
-            tooltip: 'Dashboard de progreso',
-            onPressed: () => Navigator.push(context, MaterialPageRoute(
-              builder: (_) => DashboardScreen(registros: _registros),
-            )).then((_) => setState(() {})),
+          IconButton(icon: const Icon(Icons.bar_chart),
+              tooltip: 'Dashboard',
+              onPressed: () => Navigator.push(context, MaterialPageRoute(
+                builder: (_) => DashboardScreen(registros: _registros),
+              )).then((_) => setState(() {}))),
+          IconButton(icon: const Icon(Icons.person_search),
+              tooltip: 'Checklist empleado',
+              onPressed: () => Navigator.push(context, MaterialPageRoute(
+                builder: (_) => ChecklistScreen(
+                  registros: _registros,
+                  onActivoEscaneado: (c, l) =>
+                      _insertarActivo(c, localizacionForzada: l),
+                ),
+              )).then((_) => setState(() {}))),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (v) {
+              switch (v) {
+                case 'historial':
+                  Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => const HistorialScreen()));
+                  break;
+                case 'excel':     _exportarExcel(); break;
+                case 'compartir':
+                  if (_registros.isNotEmpty) {
+                    _inventario.rutaArchivo.then((ruta) =>
+                        Share.shareXFiles([XFile(ruta)],
+                            subject: 'ALM_Inventarios.txt'));
+                  }
+                  break;
+                case 'borrar':    _borrarArchivo(); break;
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'historial',
+                  child: ListTile(dense: true,
+                      leading: Icon(Icons.history),
+                      title: Text('Historial de sesiones'))),
+              const PopupMenuItem(value: 'excel',
+                  child: ListTile(dense: true,
+                      leading: Icon(Icons.table_chart_outlined),
+                      title: Text('Exportar Excel'))),
+              const PopupMenuItem(value: 'compartir',
+                  child: ListTile(dense: true,
+                      leading: Icon(Icons.share),
+                      title: Text('Compartir TXT (SIGA)'))),
+              const PopupMenuDivider(),
+              const PopupMenuItem(value: 'borrar',
+                  child: ListTile(dense: true,
+                      leading: Icon(Icons.delete_outline, color: Colors.red),
+                      title: Text('Borrar todo',
+                          style: TextStyle(color: Colors.red)))),
+            ],
           ),
-          // Botón checklist por empleado
-          IconButton(
-            icon: const Icon(Icons.person_search),
-            tooltip: 'Checklist por empleado',
-            onPressed: _abrirChecklist,
-          ),
-          IconButton(icon: const Icon(Icons.share), tooltip: 'Compartir',
-              onPressed: _registros.isEmpty ? null : _compartirArchivo),
-          IconButton(icon: const Icon(Icons.delete_outline), tooltip: 'Borrar todo',
-              onPressed: _registros.isEmpty ? null : _borrarArchivo),
         ],
       ),
       body: _cargando
-          ? const Center(child: CircularProgressIndicator())
-          : _escaneando ? _buildEscaner() : _buildPrincipal(),
+          ? _buildCargando()
+          : _errorCarga
+              ? _buildError()
+              : _escaneando
+                  ? _buildEscaner()
+                  : _buildPrincipal(),
+    );
+  }
+
+  // ── Pantalla de carga detallada ───────────────────────────────────
+
+  Widget _buildCargando() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const CircularProgressIndicator(),
+          const SizedBox(height: 20),
+          Text(_estadoCarga,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14, color: Colors.black54)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildError() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.error_outline, color: Colors.red, size: 56),
+          const SizedBox(height: 12),
+          const Text('Error al cargar los catálogos',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 8),
+          Text(_estadoCarga,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.black54, fontSize: 13)),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed: () {
+              setState(() { _cargando = true; _errorCarga = false; });
+              _init();
+            },
+            icon: const Icon(Icons.refresh),
+            label: const Text('Reintentar'),
+          ),
+        ]),
+      ),
     );
   }
 
   Widget _buildPrincipal() {
     return Column(children: [
+      // Banner de estado de carga
+      if (!_cargando && !_errorCarga)
+        Container(
+          color: Colors.green.shade50,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: Row(children: [
+            Icon(Icons.check_circle, color: Colors.green.shade600, size: 14),
+            const SizedBox(width: 6),
+            Text(_estadoCarga,
+                style: TextStyle(fontSize: 11, color: Colors.green.shade700)),
+          ]),
+        ),
       _buildPanelLocalizacion(),
       Expanded(child: _buildLista()),
       _buildBotones(),
@@ -372,7 +592,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
               decoration: const InputDecoration(
                 isDense: true, hintText: 'Clave o nombre...',
                 border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               ),
               onChanged: _onLocTextChanged,
               onTap: () => setState(() {
@@ -434,12 +655,12 @@ class _InventarioScreenState extends State<InventarioScreen> {
     );
   }
 
+  // ── Lista con nota visible ────────────────────────────────────────
+
   Widget _buildLista() {
     if (_registros.isEmpty) {
-      return const Center(
-          child: Text('Sin registros aún.\nEscanea o captura un activo.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey)));
+      return const Center(child: Text('Sin registros aún.\nEscanea o captura un activo.',
+          textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)));
     }
     return ListView.builder(
       reverse: true,
@@ -447,11 +668,11 @@ class _InventarioScreenState extends State<InventarioScreen> {
       itemCount: _registros.length,
       itemBuilder: (_, i) {
         final realIdx = _registros.length - 1 - i;
-        final r    = _registros[realIdx];
-        final desc = _catalogo.descripcionActivo(r.cveActivo);
-        final veces = _registros
+        final r       = _registros[realIdx];
+        final desc    = _catalogo.descripcionActivo(r.cveActivo);
+        final veces   = _registros
             .where((x) => _mismoActivo(x.cveActivo, r.cveActivo)).length;
-        final esDup = veces > 1;
+        final esDup   = veces > 1;
 
         return Dismissible(
           key: Key('${r.cveActivo}_${r.fecha.millisecondsSinceEpoch}'),
@@ -462,31 +683,30 @@ class _InventarioScreenState extends State<InventarioScreen> {
             padding: const EdgeInsets.only(right: 20),
             child: const Icon(Icons.delete, color: Colors.white),
           ),
-          confirmDismiss: (_) async {
-            return await showDialog<bool>(
-              context: context,
-              builder: (_) => AlertDialog(
-                title: const Text('Eliminar registro'),
-                content: Text('¿Eliminar ${r.cveActivo}?'),
-                actions: [
-                  TextButton(onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Cancelar')),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text('Eliminar'),
-                  ),
-                ],
-              ),
-            ) ?? false;
-          },
+          confirmDismiss: (_) async => await showDialog<bool>(
+            context: context,
+            builder: (_) => AlertDialog(
+              title: const Text('Eliminar registro'),
+              content: Text('¿Eliminar ${r.cveActivo}?'),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Cancelar')),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Eliminar'),
+                ),
+              ],
+            ),
+          ) ?? false,
           onDismissed: (_) => _eliminarRegistro(realIdx),
           child: ListTile(
             dense: true,
             tileColor: esDup ? Colors.orange.shade50 : null,
             leading: CircleAvatar(
               radius: 16,
-              backgroundColor: esDup ? Colors.orange : const Color(0xFF1B4F8A),
+              backgroundColor:
+                  esDup ? Colors.orange : const Color(0xFF1B4F8A),
               child: Text('${_registros.length - i}',
                   style: const TextStyle(color: Colors.white, fontSize: 11)),
             ),
@@ -496,7 +716,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
               if (esDup) ...[
                 const SizedBox(width: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(color: Colors.orange,
                       borderRadius: BorderRadius.circular(10)),
                   child: Text('×$veces', style: const TextStyle(
@@ -504,9 +725,22 @@ class _InventarioScreenState extends State<InventarioScreen> {
                       fontWeight: FontWeight.bold)),
                 ),
               ],
+              if (r.nota.isNotEmpty) ...[
+                const SizedBox(width: 6),
+                Icon(Icons.note_outlined,
+                    size: 14, color: Colors.purple.shade400),
+              ],
             ]),
-            subtitle: Text(desc.isNotEmpty ? desc : r.localizacion,
-                style: const TextStyle(fontSize: 12)),
+            subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(desc.isNotEmpty ? desc : r.localizacion,
+                  style: const TextStyle(fontSize: 12)),
+              if (r.nota.isNotEmpty)
+                Text('📝 ${r.nota}',
+                    style: TextStyle(fontSize: 11,
+                        color: Colors.purple.shade600,
+                        fontStyle: FontStyle.italic)),
+            ]),
             trailing: Row(mainAxisSize: MainAxisSize.min, children: [
               Text(r.localizacion,
                   style: TextStyle(color: Colors.blue.shade700,
@@ -577,7 +811,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.teal.shade700,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 14),
             ),
             icon: const Icon(Icons.fact_check_outlined),
             label: const Text('Verificar'),
@@ -587,13 +822,12 @@ class _InventarioScreenState extends State<InventarioScreen> {
     );
   }
 
-  // ── Vista escáner mejorada ────────────────────────────────────────
+  // ── Vista escáner ─────────────────────────────────────────────────
 
   Widget _buildEscaner() {
     return Stack(children: [
       MobileScanner(controller: _scannerCtrl!, onDetect: _onDetected),
       _buildOverlayConRecuadro(),
-      // Info superior
       Positioned(
         top: 0, left: 0, right: 0,
         child: Container(
@@ -610,30 +844,26 @@ class _InventarioScreenState extends State<InventarioScreen> {
           ]),
         ),
       ),
-      // Panel inferior
       Positioned(
         bottom: 0, left: 0, right: 0,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           if (_codigoMostrado.isNotEmpty) _buildPanelUltimoEscaneo(),
           Container(
             color: Colors.black.withOpacity(0.65),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 16, vertical: 12),
             child: Row(children: [
-              // Linterna
               GestureDetector(
-                onTap: _toggleLinterna,
+                onTap: () => _scannerCtrl?.toggleTorch(),
                 child: Container(
                   padding: const EdgeInsets.all(10),
                   margin: const EdgeInsets.only(right: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                  decoration: BoxDecoration(color: Colors.white24,
+                      borderRadius: BorderRadius.circular(8)),
                   child: const Icon(Icons.flashlight_on,
                       color: Colors.white, size: 26),
                 ),
               ),
-              // Detener
               Expanded(child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.red.shade700,
@@ -653,19 +883,18 @@ class _InventarioScreenState extends State<InventarioScreen> {
     return LayoutBuilder(builder: (context, constraints) {
       final w = constraints.maxWidth;
       final h = constraints.maxHeight;
-      // Recuadro más ancho para facilitar lectura de Code 128 (barras largas)
       const rW = 300.0, rH = 140.0;
       final left = (w - rW) / 2;
       final top  = (h - rH) / 2 - 30;
 
-      final borderColor = _codigoMostrado.isEmpty
-          ? Colors.white
+      final borderColor = _codigoMostrado.isEmpty ? Colors.white
           : _noEncontrado ? Colors.red
           : _esDuplicadoVisor ? Colors.orange
           : Colors.green;
 
       return Stack(children: [
-        Positioned.fill(child: Container(color: Colors.black.withOpacity(0.45))),
+        Positioned.fill(
+            child: Container(color: Colors.black.withOpacity(0.45))),
         Positioned(
           left: left, top: top, width: rW, height: rH,
           child: Container(decoration: BoxDecoration(
@@ -675,11 +904,10 @@ class _InventarioScreenState extends State<InventarioScreen> {
           )),
         ),
         ..._buildEsquinas(left, top, rW, rH, borderColor),
-        // Línea guía central horizontal (ayuda a centrar el código)
         Positioned(
-          left: left + 10, top: top + rH / 2 - 0.5, width: rW - 20,
+          left: left, top: top + rH / 2 - 0.5, width: rW,
           height: 1,
-          child: Container(color: borderColor.withOpacity(0.5)),
+          child: Container(color: borderColor.withOpacity(0.4)),
         ),
         Positioned(
           left: left, top: top + rH + 8, width: rW,
@@ -693,18 +921,20 @@ class _InventarioScreenState extends State<InventarioScreen> {
     });
   }
 
-  List<Widget> _buildEsquinas(double l, double t, double w, double h, Color c) {
+  List<Widget> _buildEsquinas(
+      double l, double t, double w, double h, Color c) {
     const len = 22.0, thick = 3.5;
     Widget corner(double x, double y, bool izq, bool arr) => Positioned(
       left: x, top: y,
       child: SizedBox(width: len, height: len,
           child: CustomPaint(painter: _CornerPainter(
-              color: c, thickness: thick, izquierda: izq, arriba: arr))),
+              color: c, thickness: thick,
+              izquierda: izq, arriba: arr))),
     );
     return [
-      corner(l,         t,           true,  true),
-      corner(l + w - len, t,         false, true),
-      corner(l,         t + h - len, true,  false),
+      corner(l,           t,           true,  true),
+      corner(l + w - len, t,           false, true),
+      corner(l,           t + h - len, true,  false),
       corner(l + w - len, t + h - len, false, false),
     ];
   }
@@ -756,8 +986,10 @@ class _CornerPainter extends CustomPainter {
         ..strokeCap = StrokeCap.square ..style = PaintingStyle.stroke;
     final x  = izquierda ? 0.0 : size.width;
     final y  = arriba    ? 0.0 : size.height;
-    canvas.drawLine(Offset(x, y), Offset(x + (izquierda ? size.width : -size.width), y), p);
-    canvas.drawLine(Offset(x, y), Offset(x, y + (arriba ? size.height : -size.height)), p);
+    canvas.drawLine(Offset(x, y),
+        Offset(x + (izquierda ? size.width : -size.width), y), p);
+    canvas.drawLine(Offset(x, y),
+        Offset(x, y + (arriba ? size.height : -size.height)), p);
   }
   @override
   bool shouldRepaint(_CornerPainter o) =>
