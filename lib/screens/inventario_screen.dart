@@ -146,7 +146,9 @@ class _InventarioScreenState extends State<InventarioScreen> {
   // ── Insertar activo ───────────────────────────────────────────────
 
   Future<void> _insertarActivo(String codigoEscaneado,
-      {String? localizacionForzada, String nota = ''}) async {
+      {String? localizacionForzada,
+      String nota = '',
+      bool permitirNoCatalogado = false}) async {
     final loc = localizacionForzada ?? _cveLocalizacion;
     if (loc == null) {
       _mostrarError('Selecciona una localización primero');
@@ -156,11 +158,22 @@ class _InventarioScreenState extends State<InventarioScreen> {
     final desc       = _catalogo.descripcionActivo(codigoEscaneado);
     final display    = codigoEscaneado.trim();
 
-    // ── Activo NO catalogado ─────────────────────────────────────────
-    // Si no está en el catálogo, lo registramos igual con tipo NC
     if (desc.isEmpty) {
-      final duplicado = _esDuplicado(cveInterno);
+      // ── No catalogado ──────────────────────────────────────────────
+      if (!permitirNoCatalogado) {
+        // Escáner: rechazar y sugerir captura manual
+        _vibrar(error: true);
+        setState(() {
+          _codigoMostrado   = display;
+          _descMostrada     = 'No en catálogo — usa captura manual si es un activo';
+          _esDuplicadoVisor = false;
+          _noEncontrado     = true;
+        });
+        return;
+      }
 
+      // Captura manual: registrar como NC
+      final duplicado = _esDuplicado(cveInterno);
       if (duplicado) {
         _vibrar(duplicado: true);
         setState(() {
@@ -172,15 +185,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
         return;
       }
 
-      // Mostrar en el visor como ámbar (no catalogado)
       _vibrar();
-      setState(() {
-        _codigoMostrado   = display;
-        _descMostrada     = 'Activo no catalogado — se registrará';
-        _esDuplicadoVisor = false;
-        _noEncontrado     = true; // usamos el flag para color ámbar
-      });
-
       final reg = RegistroInventario(
         localizacion: loc,
         cveActivo:    cveInterno,
@@ -193,10 +198,9 @@ class _InventarioScreenState extends State<InventarioScreen> {
         _registros.add(reg);
         _escaneadosEnSesion.add(cveInterno.toUpperCase());
       });
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('⚠ $display registrado (no catalogado)'),
+          content: Text('⚠ $display registrado como no catalogado (NC)'),
           backgroundColor: Colors.amber.shade700,
           duration: const Duration(seconds: 3),
         ));
@@ -204,7 +208,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
       return;
     }
 
-    // ── Activo catalogado ─────────────────────────────────────────────
+    // ── Catalogado ─────────────────────────────────────────────────
     final duplicado = _esDuplicado(cveInterno);
     setState(() {
       _codigoMostrado   = display;
@@ -219,7 +223,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
     }
 
     _vibrar();
-
     final reg = RegistroInventario(
       localizacion: loc,
       cveActivo:    cveInterno,
@@ -231,7 +234,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
       _registros.add(reg);
       _escaneadosEnSesion.add(cveInterno.toUpperCase());
     });
-
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('✓ $display  $desc'),
@@ -372,7 +374,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
       builder: (_) => ManualEntryDialog(cveLocalizacion: _cveLocalizacion!),
     );
     if (result == null || result.isEmpty) return;
-    await _insertarActivo(result);
+    await _insertarActivo(result, permitirNoCatalogado: true);
   }
 
   // ── Borrar todo ───────────────────────────────────────────────────
