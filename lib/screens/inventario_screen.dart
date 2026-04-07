@@ -624,8 +624,10 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   Widget _buildLista() {
     if (_registros.isEmpty) {
-      return const Center(child: Text('Sin registros aún.\nEscanea o captura un activo.',
-          textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)));
+      return const Center(child: Text(
+          'Sin registros aún.\nEscanea o captura un activo.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.grey)));
     }
     return ListView.builder(
       reverse: true,
@@ -637,7 +639,18 @@ class _InventarioScreenState extends State<InventarioScreen> {
         final desc    = _catalogo.descripcionActivo(r.cveActivo);
         final veces   = _registros
             .where((x) => _mismoActivo(x.cveActivo, r.cveActivo)).length;
-        final esDup   = veces > 1;
+        final esDup      = veces > 1;
+        final tieneNota  = r.nota.isNotEmpty;
+
+        // Color del tile: nota tiene prioridad visual sobre duplicado
+        Color? tileColor;
+        if (tieneNota && esDup) {
+          tileColor = Colors.purple.shade50;
+        } else if (tieneNota) {
+          tileColor = Colors.purple.shade50;
+        } else if (esDup) {
+          tileColor = Colors.orange.shade50;
+        }
 
         return Dismissible(
           key: Key('${r.cveActivo}_${r.fecha.millisecondsSinceEpoch}'),
@@ -646,35 +659,48 @@ class _InventarioScreenState extends State<InventarioScreen> {
             alignment: Alignment.centerRight,
             color: Colors.red.shade700,
             padding: const EdgeInsets.only(right: 20),
-            child: const Icon(Icons.delete, color: Colors.white),
-          ),
-          confirmDismiss: (_) async => await showDialog<bool>(
-            context: context,
-            builder: (_) => AlertDialog(
-              title: const Text('Eliminar registro'),
-              content: Text('¿Eliminar ${r.cveActivo}?'),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(context, false),
-                    child: const Text('Cancelar')),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Eliminar'),
-                ),
+            child: const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.delete, color: Colors.white),
+                SizedBox(height: 2),
+                Text('Eliminar', style: TextStyle(
+                    color: Colors.white, fontSize: 10)),
               ],
             ),
-          ) ?? false,
+          ),
+          // Confirmar al deslizar
+          confirmDismiss: (_) => _confirmarEliminar(r.cveActivo),
           onDismissed: (_) => _eliminarRegistro(realIdx),
           child: ListTile(
             dense: true,
-            tileColor: esDup ? Colors.orange.shade50 : null,
-            leading: CircleAvatar(
-              radius: 16,
-              backgroundColor:
-                  esDup ? Colors.orange : const Color(0xFF1B4F8A),
-              child: Text('${_registros.length - i}',
-                  style: const TextStyle(color: Colors.white, fontSize: 11)),
+            tileColor: tileColor,
+            // Borde izquierdo morado si tiene nota
+            contentPadding: EdgeInsets.only(
+              left: tieneNota ? 0 : 16,
+              right: 8,
             ),
+            leading: Row(mainAxisSize: MainAxisSize.min, children: [
+              // Barra lateral morada si hay nota
+              if (tieneNota)
+                Container(
+                  width: 4,
+                  height: 56,
+                  color: Colors.purple.shade400,
+                ),
+              if (tieneNota) const SizedBox(width: 8),
+              CircleAvatar(
+                radius: 16,
+                backgroundColor: tieneNota
+                    ? Colors.purple.shade400
+                    : esDup
+                        ? Colors.orange
+                        : const Color(0xFF1B4F8A),
+                child: Text('${_registros.length - i}',
+                    style: const TextStyle(
+                        color: Colors.white, fontSize: 11)),
+              ),
+            ]),
             title: Row(children: [
               Text(r.cveActivo, style: const TextStyle(
                   fontWeight: FontWeight.bold, fontSize: 14)),
@@ -690,40 +716,196 @@ class _InventarioScreenState extends State<InventarioScreen> {
                       fontWeight: FontWeight.bold)),
                 ),
               ],
-              if (r.nota.isNotEmpty) ...[
+              // Badge "NOTA" resaltado
+              if (tieneNota) ...[
                 const SizedBox(width: 6),
-                Icon(Icons.note_outlined,
-                    size: 14, color: Colors.purple.shade400),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.shade400,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Text('NOTA', style: TextStyle(
+                      color: Colors.white, fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5)),
+                ),
               ],
             ]),
             subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(desc.isNotEmpty ? desc : r.localizacion,
                   style: const TextStyle(fontSize: 12)),
-              if (r.nota.isNotEmpty)
-                Text('📝 ${r.nota}',
-                    style: TextStyle(fontSize: 11,
-                        color: Colors.purple.shade600,
-                        fontStyle: FontStyle.italic)),
-            ]),
-            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-              Text(r.localizacion,
-                  style: TextStyle(color: Colors.blue.shade700,
-                      fontSize: 11, fontWeight: FontWeight.w500)),
-              const SizedBox(width: 4),
-              GestureDetector(
-                onTap: () => _eliminarRegistro(realIdx),
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 4),
-                  child: Icon(Icons.remove_circle_outline,
-                      color: Colors.red.shade300, size: 20),
+              if (tieneNota)
+                Container(
+                  margin: const EdgeInsets.only(top: 3),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.shade100,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.edit_note,
+                        size: 13, color: Colors.purple.shade700),
+                    const SizedBox(width: 4),
+                    Flexible(child: Text(r.nota,
+                        style: TextStyle(fontSize: 11,
+                            color: Colors.purple.shade800,
+                            fontWeight: FontWeight.w500))),
+                  ]),
                 ),
-              ),
             ]),
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(r.localizacion,
+                    style: TextStyle(color: Colors.blue.shade700,
+                        fontSize: 10, fontWeight: FontWeight.w500)),
+                const SizedBox(height: 4),
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  // Botón nota
+                  GestureDetector(
+                    onTap: () => _editarNota(realIdx),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: Icon(
+                        tieneNota
+                            ? Icons.edit_note
+                            : Icons.note_add_outlined,
+                        color: tieneNota
+                            ? Colors.purple.shade400
+                            : Colors.grey.shade400,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                  // Botón eliminar con confirmación
+                  GestureDetector(
+                    onTap: () async {
+                      final ok = await _confirmarEliminar(r.cveActivo);
+                      if (ok == true) _eliminarRegistro(realIdx);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: Icon(Icons.remove_circle_outline,
+                          color: Colors.red.shade300, size: 20),
+                    ),
+                  ),
+                ]),
+              ],
+            ),
           ),
         );
       },
     );
+  }
+
+  // ── Confirmar eliminación ─────────────────────────────────────────
+
+  Future<bool> _confirmarEliminar(String cveActivo) async {
+    final desc = _catalogo.descripcionActivo(cveActivo);
+    return await showDialog<bool>(
+          context: context,
+          builder: (_) => AlertDialog(
+            icon: const Icon(Icons.warning_amber_rounded,
+                color: Colors.red, size: 36),
+            title: const Text('¿Eliminar registro?'),
+            content: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text(cveActivo,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 15)),
+              if (desc.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(desc,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontSize: 13, color: Colors.black54)),
+              ],
+            ]),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancelar')),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white),
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Sí, eliminar'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  // ── Editar nota de un registro existente ──────────────────────────
+
+  Future<void> _editarNota(int index) async {
+    final r    = _registros[index];
+    final ctrl = TextEditingController(text: r.nota);
+
+    final nuevaNota = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Row(children: [
+          Icon(Icons.edit_note, color: Colors.purple.shade400),
+          const SizedBox(width: 8),
+          Expanded(child: Text(r.cveActivo,
+              style: const TextStyle(fontSize: 15))),
+        ]),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLength: 80,
+          decoration: InputDecoration(
+            hintText: 'Ej: dañado, sin etiqueta, ubicación incorrecta...',
+            border: const OutlineInputBorder(),
+            // Botón para limpiar nota
+            suffixIcon: ctrl.text.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () => ctrl.clear(),
+                  )
+                : null,
+          ),
+          onSubmitted: (v) => Navigator.pop(context, v.trim()),
+        ),
+        actions: [
+          if (r.nota.isNotEmpty)
+            TextButton(
+              onPressed: () => Navigator.pop(context, ''),
+              child: Text('Quitar nota',
+                  style: TextStyle(color: Colors.red.shade400)),
+            ),
+          TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, ctrl.text.trim()),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+
+    if (nuevaNota == null) return; // Canceló
+
+    // Reconstruir el registro con la nueva nota
+    final actualizado = RegistroInventario(
+      localizacion: r.localizacion,
+      cveActivo:    r.cveActivo,
+      fecha:        r.fecha,
+      nota:         nuevaNota,
+    );
+
+    setState(() => _registros[index] = actualizado);
+
+    // Reescribir el archivo completo
+    await _inventario.borrarArchivo();
+    for (final reg in _registros) await _inventario.agregarRegistro(reg);
   }
 
   Widget _buildBotones() {
