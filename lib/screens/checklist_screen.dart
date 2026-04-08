@@ -468,21 +468,8 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
             ]),
           ),
         ),
-        // Recuadro centrado
-        Center(child: Container(
-          width: 300, height: 140,
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.white, width: 2.5),
-            borderRadius: BorderRadius.circular(8),
-          ),
-        )),
-        // Instrucción
-        Positioned(
-          bottom: 100, left: 0, right: 0,
-          child: const Text('Centra el código en el recuadro',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white70, fontSize: 13)),
-        ),
+        // Línea de escaneo animada — sin recuadro restrictivo
+        const Positioned.fill(child: _ScanLine()),
         // Botón cancelar
         Positioned(
           bottom: 0, left: 0, right: 0,
@@ -505,4 +492,69 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
       ]),
     );
   }
+}
+
+// ── Línea de escaneo animada ───────────────────────────────────────
+
+class _ScanLine extends StatefulWidget {
+  const _ScanLine();
+  @override
+  State<_ScanLine> createState() => _ScanLineState();
+}
+
+class _ScanLineState extends State<_ScanLine>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double>   _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1800))
+      ..repeat(reverse: true);
+    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
+  }
+
+  @override
+  void dispose() { _ctrl.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _anim,
+    builder: (_, __) => CustomPaint(painter: _ScanLinePainter(_anim.value)),
+  );
+}
+
+class _ScanLinePainter extends CustomPainter {
+  final double progress;
+  _ScanLinePainter(this.progress);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final top    = size.height * 0.18;
+    final bottom = size.height * 0.78;
+    final y      = top + (bottom - top) * progress;
+
+    final paint = Paint()
+      ..shader = LinearGradient(colors: [
+        Colors.transparent, Colors.green.withOpacity(0.9),
+        Colors.greenAccent, Colors.green.withOpacity(0.9),
+        Colors.transparent,
+      ], stops: const [0.0, 0.2, 0.5, 0.8, 1.0])
+          .createShader(Rect.fromLTWH(0, y - 1, size.width, 2))
+      ..strokeWidth = 2.5 ..style = PaintingStyle.stroke;
+    canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+
+    final glow = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter, end: Alignment.bottomCenter,
+        colors: [Colors.green.withOpacity(0.15), Colors.transparent],
+      ).createShader(Rect.fromLTWH(0, y, size.width, 18))
+      ..style = PaintingStyle.fill;
+    canvas.drawRect(Rect.fromLTWH(0, y, size.width, 18), glow);
+  }
+
+  @override
+  bool shouldRepaint(_ScanLinePainter o) => o.progress != progress;
 }
