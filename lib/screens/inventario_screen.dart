@@ -1049,7 +1049,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
               foregroundColor: Colors.white,
             ),
             icon: const Icon(Icons.document_scanner_outlined, size: 18),
-            label: const Text('OCR — Leer etiqueta'),
+            label: const Text('OCR'),
           )),
           const SizedBox(width: 8),
           Expanded(child: ElevatedButton.icon(
