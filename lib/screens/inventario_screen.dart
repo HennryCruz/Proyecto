@@ -14,6 +14,7 @@ import '../widgets/manual_entry_dialog.dart';
 import 'checklist_screen.dart';
 import 'dashboard_screen.dart';
 import 'historial_screen.dart';
+import 'mapa_screen.dart';
 import 'ocr_screen.dart';
 import 'verificacion_screen.dart';
 
@@ -466,6 +467,14 @@ class _InventarioScreenState extends State<InventarioScreen> {
             ),
             tooltip: 'Cambiar tema',
             onPressed: () => InventarioCENAMApp.of(context)?.toggleTheme(),
+          ),
+          // Mapa del edificio
+          IconButton(
+            icon: const Icon(Icons.map_outlined),
+            tooltip: 'Ver mapa',
+            onPressed: () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => MapaScreen(localizacion: _cveLocalizacion),
+            )),
           ),
           IconButton(icon: const Icon(Icons.bar_chart),
               tooltip: 'Dashboard',

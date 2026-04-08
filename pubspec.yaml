@@ -21,6 +21,7 @@ dependencies:
   google_mlkit_text_recognition: ^0.13.0
   image_picker: ^1.1.2
   image: ^4.2.0
+  pdfx: ^2.9.0
 
 dev_dependencies:
   flutter_test:
@@ -33,3 +34,5 @@ flutter:
     - assets/localizaciones.txt
     - assets/activos.txt
     - assets/activos_teorico.csv
+    # Mapas de edificios — carpeta completa
+    - assets/mapas/
