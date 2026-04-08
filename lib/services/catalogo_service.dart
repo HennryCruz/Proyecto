@@ -125,4 +125,12 @@ class CatalogoService {
   int get totalActivos       => _activos.length;
   int get totalBarcodes      => _barcode.length;
   int get totalLocalizaciones => _localizaciones.length;
+
+  // Devuelve todas las claves de localización de un edificio (por letra)
+  List<String> localizacionesDeEdificio(String letra) {
+    final l = letra.toUpperCase();
+    return _clavesLocalizacion
+        .where((k) => k.isNotEmpty && k[0].toUpperCase() == l)
+        .toList();
+  }
 }

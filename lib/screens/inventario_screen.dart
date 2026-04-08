@@ -16,6 +16,7 @@ import 'dashboard_screen.dart';
 import 'historial_screen.dart';
 import 'mapa_screen.dart';
 import 'ocr_screen.dart';
+import 'progreso_screen.dart';
 import 'verificacion_screen.dart';
 
 class InventarioScreen extends StatefulWidget {
@@ -498,6 +499,11 @@ class _InventarioScreenState extends State<InventarioScreen> {
                   Navigator.push(context, MaterialPageRoute(
                       builder: (_) => const HistorialScreen()));
                   break;
+                case 'progreso':
+                  Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => ProgresoScreen(
+                          registros: _registros)));
+                  break;
                 case 'excel':     _exportarExcel(); break;
                 case 'compartir':
                   if (_registros.isNotEmpty) {
@@ -514,6 +520,10 @@ class _InventarioScreenState extends State<InventarioScreen> {
                   child: ListTile(dense: true,
                       leading: Icon(Icons.history),
                       title: Text('Historial de sesiones'))),
+              const PopupMenuItem(value: 'progreso',
+                  child: ListTile(dense: true,
+                      leading: Icon(Icons.flag_outlined),
+                      title: Text('Progreso por edificio'))),
               const PopupMenuItem(value: 'excel',
                   child: ListTile(dense: true,
                       leading: Icon(Icons.table_chart_outlined),
