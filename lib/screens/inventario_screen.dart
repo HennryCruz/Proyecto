@@ -341,7 +341,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
       _esDuplicadoVisor = false;
       _noEncontrado     = false;
       _scannerCtrl      = MobileScannerController(
-        detectionSpeed: DetectionSpeed.fast,
+        detectionSpeed: DetectionSpeed.noDuplicates,
         formats: const [
           BarcodeFormat.code128, BarcodeFormat.code39,
           BarcodeFormat.ean13,   BarcodeFormat.ean8,
