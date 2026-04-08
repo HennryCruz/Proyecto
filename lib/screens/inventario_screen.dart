@@ -48,6 +48,9 @@ class _InventarioScreenState extends State<InventarioScreen> {
   String _descMostrada      = '';
   bool   _esDuplicadoVisor  = false;
   bool   _noEncontrado      = false;
+  // Debounce: evita doble registro con DetectionSpeed.fast
+  DateTime? _ultimoEscaneo;
+  static const _debounceMs = 1200;
 
   // Vibración disponible
   bool _vibracionDisponible = false;
@@ -338,7 +341,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
       _esDuplicadoVisor = false;
       _noEncontrado     = false;
       _scannerCtrl      = MobileScannerController(
-        detectionSpeed: DetectionSpeed.normal,
+        detectionSpeed: DetectionSpeed.fast,
         formats: const [
           BarcodeFormat.code128, BarcodeFormat.code39,
           BarcodeFormat.ean13,   BarcodeFormat.ean8,
@@ -359,7 +362,16 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   void _onDetected(BarcodeCapture capture) {
     final codigo = capture.barcodes.firstOrNull?.rawValue;
-    if (codigo != null && codigo.isNotEmpty) _insertarActivo(codigo);
+    if (codigo == null || codigo.isEmpty) return;
+
+    // Debounce: ignorar si se detectó el mismo código hace menos de 1.2s
+    final ahora = DateTime.now();
+    if (_ultimoEscaneo != null &&
+        ahora.difference(_ultimoEscaneo!).inMilliseconds < _debounceMs) {
+      return;
+    }
+    _ultimoEscaneo = ahora;
+    _insertarActivo(codigo);
   }
 
   // ── Registro manual con nota ──────────────────────────────────────
@@ -1022,30 +1034,40 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   Widget _buildEscaner() {
     return Stack(children: [
+      // Cámara a pantalla completa — sin overlay oscuro
       MobileScanner(controller: _scannerCtrl!, onDetect: _onDetected),
-      _buildOverlayConRecuadro(),
+
+      // Línea de escaneo animada (visual, no restrictiva)
+      const Positioned.fill(child: _ScanLine()),
+
+      // Info superior
       Positioned(
         top: 0, left: 0, right: 0,
         child: Container(
-          color: Colors.black.withOpacity(0.65),
+          color: Colors.black.withOpacity(0.55),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('Loc: $_cveLocalizacion',
                 style: const TextStyle(color: Colors.white,
                     fontWeight: FontWeight.bold)),
             Text(_descLocalizacion,
-                style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                style: const TextStyle(
+                    color: Colors.white70, fontSize: 12)),
             Text('Registros: ${_registros.length}',
-                style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                style: const TextStyle(
+                    color: Colors.white70, fontSize: 12)),
           ]),
         ),
       ),
+
+      // Panel inferior
       Positioned(
         bottom: 0, left: 0, right: 0,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           if (_codigoMostrado.isNotEmpty) _buildPanelUltimoEscaneo(),
           Container(
-            color: Colors.black.withOpacity(0.65),
+            color: Colors.black.withOpacity(0.55),
             padding: const EdgeInsets.symmetric(
                 horizontal: 16, vertical: 12),
             child: Row(children: [
@@ -1073,66 +1095,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
         ]),
       ),
     ]);
-  }
-
-  Widget _buildOverlayConRecuadro() {
-    return LayoutBuilder(builder: (context, constraints) {
-      final w = constraints.maxWidth;
-      final h = constraints.maxHeight;
-      const rW = 300.0, rH = 140.0;
-      final left = (w - rW) / 2;
-      final top  = (h - rH) / 2 - 30;
-
-      final borderColor = _codigoMostrado.isEmpty ? Colors.white
-          : _noEncontrado ? Colors.red
-          : _esDuplicadoVisor ? Colors.orange
-          : Colors.green;
-
-      return Stack(children: [
-        Positioned.fill(
-            child: Container(color: Colors.black.withOpacity(0.45))),
-        Positioned(
-          left: left, top: top, width: rW, height: rH,
-          child: Container(decoration: BoxDecoration(
-            color: Colors.transparent,
-            border: Border.all(color: borderColor, width: 2.5),
-            borderRadius: BorderRadius.circular(8),
-          )),
-        ),
-        ..._buildEsquinas(left, top, rW, rH, borderColor),
-        Positioned(
-          left: left, top: top + rH / 2 - 0.5, width: rW,
-          height: 1,
-          child: Container(color: borderColor.withOpacity(0.4)),
-        ),
-        Positioned(
-          left: left, top: top + rH + 8, width: rW,
-          child: Text(
-            _codigoMostrado.isEmpty ? 'Centra el código en el recuadro' : '',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
-          ),
-        ),
-      ]);
-    });
-  }
-
-  List<Widget> _buildEsquinas(
-      double l, double t, double w, double h, Color c) {
-    const len = 22.0, thick = 3.5;
-    Widget corner(double x, double y, bool izq, bool arr) => Positioned(
-      left: x, top: y,
-      child: SizedBox(width: len, height: len,
-          child: CustomPaint(painter: _CornerPainter(
-              color: c, thickness: thick,
-              izquierda: izq, arriba: arr))),
-    );
-    return [
-      corner(l,           t,           true,  true),
-      corner(l + w - len, t,           false, true),
-      corner(l,           t + h - len, true,  false),
-      corner(l + w - len, t + h - len, false, false),
-    ];
   }
 
   Widget _buildPanelUltimoEscaneo() {
@@ -1170,24 +1132,93 @@ class _InventarioScreenState extends State<InventarioScreen> {
   }
 }
 
-class _CornerPainter extends CustomPainter {
-  final Color color;
-  final double thickness;
-  final bool izquierda, arriba;
-  const _CornerPainter({required this.color, required this.thickness,
-      required this.izquierda, required this.arriba});
+// ── Línea de escaneo animada (pantalla completa, no restrictiva) ──
+
+class _ScanLine extends StatefulWidget {
+  const _ScanLine();
+
+  @override
+  State<_ScanLine> createState() => _ScanLineState();
+}
+
+class _ScanLineState extends State<_ScanLine>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double>   _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat(reverse: true);
+    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (_, __) {
+        return CustomPaint(
+          painter: _ScanLinePainter(_anim.value),
+        );
+      },
+    );
+  }
+}
+
+class _ScanLinePainter extends CustomPainter {
+  final double progress; // 0.0 → 1.0
+
+  _ScanLinePainter(this.progress);
+
   @override
   void paint(Canvas canvas, Size size) {
-    final p = Paint()..color = color ..strokeWidth = thickness
-        ..strokeCap = StrokeCap.square ..style = PaintingStyle.stroke;
-    final x  = izquierda ? 0.0 : size.width;
-    final y  = arriba    ? 0.0 : size.height;
-    canvas.drawLine(Offset(x, y),
-        Offset(x + (izquierda ? size.width : -size.width), y), p);
-    canvas.drawLine(Offset(x, y),
-        Offset(x, y + (arriba ? size.height : -size.height)), p);
+    // Zona de escaneo: franja central del 60% de la pantalla
+    final top    = size.height * 0.18;
+    final bottom = size.height * 0.78;
+    final y      = top + (bottom - top) * progress;
+
+    // Línea principal con gradiente horizontal
+    final paint = Paint()
+      ..shader = LinearGradient(
+        colors: [
+          Colors.transparent,
+          Colors.green.withOpacity(0.9),
+          Colors.greenAccent,
+          Colors.green.withOpacity(0.9),
+          Colors.transparent,
+        ],
+        stops: const [0.0, 0.2, 0.5, 0.8, 1.0],
+      ).createShader(Rect.fromLTWH(0, y - 1, size.width, 2))
+      ..strokeWidth = 2.5
+      ..style = PaintingStyle.stroke;
+
+    canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+
+    // Brillo sutil debajo de la línea
+    final glowPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Colors.green.withOpacity(0.15),
+          Colors.transparent,
+        ],
+      ).createShader(Rect.fromLTWH(0, y, size.width, 18))
+      ..style = PaintingStyle.fill;
+
+    canvas.drawRect(Rect.fromLTWH(0, y, size.width, 18), glowPaint);
   }
+
   @override
-  bool shouldRepaint(_CornerPainter o) =>
-      o.color != color || o.izquierda != izquierda || o.arriba != arriba;
+  bool shouldRepaint(_ScanLinePainter old) => old.progress != progress;
 }
