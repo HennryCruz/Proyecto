@@ -14,6 +14,7 @@ import '../widgets/manual_entry_dialog.dart';
 import 'checklist_screen.dart';
 import 'dashboard_screen.dart';
 import 'historial_screen.dart';
+import 'ocr_screen.dart';
 import 'verificacion_screen.dart';
 
 class InventarioScreen extends StatefulWidget {
@@ -300,6 +301,24 @@ class _InventarioScreenState extends State<InventarioScreen> {
     } catch (e) {
       if (mounted) _mostrarError('Error al generar Excel: $e');
     }
+  }
+
+  // ── OCR — foto de etiqueta ────────────────────────────────────────
+
+  void _abrirOcr() {
+    if (_cveLocalizacion == null) {
+      _mostrarError('Selecciona una localización primero');
+      return;
+    }
+    Navigator.push(context, MaterialPageRoute(
+      builder: (_) => OcrScreen(
+        localizacion: _cveLocalizacion!,
+        onCodigoConfirmado: (codigo) => _insertarActivo(
+          codigo,
+          permitirNoCatalogado: true,
+        ),
+      ),
+    )).then((_) => setState(() {}));
   }
 
   // ── Verificar ubicación ───────────────────────────────────────────
@@ -1013,6 +1032,19 @@ class _InventarioScreenState extends State<InventarioScreen> {
             icon: const Icon(Icons.edit),
             label: const Text('Manual'),
           )),
+          const SizedBox(width: 8),
+          // Botón OCR
+          ElevatedButton.icon(
+            onPressed: _abrirOcr,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepPurple.shade600,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 14),
+            ),
+            icon: const Icon(Icons.document_scanner_outlined),
+            label: const Text('OCR'),
+          ),
           const SizedBox(width: 8),
           ElevatedButton.icon(
             onPressed: _verificarUbicacion,
