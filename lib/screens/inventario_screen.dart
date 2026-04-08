@@ -191,11 +191,12 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
       _vibrar();
       final reg = RegistroInventario(
-        localizacion: loc,
-        cveActivo:    cveInterno,
-        fecha:        DateTime.now(),
-        nota:         nota,
-        tipo:         TipoActivo.noCatalogado,
+        localizacion:   loc,
+        cveActivo:      cveInterno,
+        codigoDisplay:  display,
+        fecha:          DateTime.now(),
+        nota:           nota,
+        tipo:           TipoActivo.noCatalogado,
       );
       await _inventario.agregarRegistro(reg);
       setState(() {
@@ -228,10 +229,11 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
     _vibrar();
     final reg = RegistroInventario(
-      localizacion: loc,
-      cveActivo:    cveInterno,
-      fecha:        DateTime.now(),
-      nota:         nota,
+      localizacion:  loc,
+      cveActivo:     cveInterno,
+      codigoDisplay: display,
+      fecha:         DateTime.now(),
+      nota:          nota,
     );
     await _inventario.agregarRegistro(reg);
     setState(() {
@@ -766,7 +768,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
               ),
             ]),
             title: Row(children: [
-              Text(r.cveActivo, style: const TextStyle(
+              Text(r.codigoDisplay, style: const TextStyle(
                   fontWeight: FontWeight.bold, fontSize: 14)),
               if (esDup) ...[
                 const SizedBox(width: 6),
@@ -886,6 +888,9 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   Future<bool> _confirmarEliminar(String cveActivo) async {
     final desc = _catalogo.descripcionActivo(cveActivo);
+    // Buscar el codigoDisplay del registro
+    final reg = _registros.where((r) => r.cveActivo == cveActivo).firstOrNull;
+    final displayLabel = reg?.codigoDisplay ?? cveActivo;
     return await showDialog<bool>(
           context: context,
           builder: (_) => AlertDialog(
@@ -893,7 +898,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
                 color: Colors.red, size: 36),
             title: const Text('¿Eliminar registro?'),
             content: Column(mainAxisSize: MainAxisSize.min, children: [
-              Text(cveActivo,
+              Text(displayLabel,
                   style: const TextStyle(
                       fontWeight: FontWeight.bold, fontSize: 15)),
               if (desc.isNotEmpty) ...[
@@ -1020,43 +1025,42 @@ class _InventarioScreenState extends State<InventarioScreen> {
                     fontWeight: FontWeight.bold, fontSize: 13)),
         ]),
         const SizedBox(height: 8),
+        // Fila 1: Escanear + Manual
         Row(children: [
           Expanded(child: ElevatedButton.icon(
             onPressed: _abrirEscaner,
-            icon: const Icon(Icons.qr_code_scanner),
+            icon: const Icon(Icons.qr_code_scanner, size: 18),
             label: const Text('Escanear'),
           )),
           const SizedBox(width: 8),
           Expanded(child: ElevatedButton.icon(
             onPressed: _registrarManual,
-            icon: const Icon(Icons.edit),
+            icon: const Icon(Icons.edit, size: 18),
             label: const Text('Manual'),
           )),
-          const SizedBox(width: 8),
-          // Botón OCR
-          ElevatedButton.icon(
+        ]),
+        const SizedBox(height: 8),
+        // Fila 2: OCR + Verificar
+        Row(children: [
+          Expanded(child: ElevatedButton.icon(
             onPressed: _abrirOcr,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.deepPurple.shade600,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 12, vertical: 14),
             ),
-            icon: const Icon(Icons.document_scanner_outlined),
-            label: const Text('OCR'),
-          ),
+            icon: const Icon(Icons.document_scanner_outlined, size: 18),
+            label: const Text('OCR — Leer etiqueta'),
+          )),
           const SizedBox(width: 8),
-          ElevatedButton.icon(
+          Expanded(child: ElevatedButton.icon(
             onPressed: _verificarUbicacion,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.teal.shade700,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 12, vertical: 14),
             ),
-            icon: const Icon(Icons.fact_check_outlined),
+            icon: const Icon(Icons.fact_check_outlined, size: 18),
             label: const Text('Verificar'),
-          ),
+          )),
         ]),
       ]),
     );

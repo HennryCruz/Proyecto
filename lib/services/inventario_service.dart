@@ -13,7 +13,8 @@ enum TipoActivo {
 
 class RegistroInventario {
   final String localizacion;
-  final String cveActivo;
+  final String cveActivo;      // Clave interna normalizada (para BD y SIGA)
+  final String codigoDisplay;  // Código exacto escaneado (para mostrar en UI)
   final DateTime fecha;
   final String nota;
   final TipoActivo tipo;
@@ -21,10 +22,12 @@ class RegistroInventario {
   RegistroInventario({
     required this.localizacion,
     required this.cveActivo,
+    String? codigoDisplay,
     required this.fecha,
     this.nota = '',
     this.tipo = TipoActivo.catalogado,
-  });
+  }) : codigoDisplay = codigoDisplay ?? cveActivo;
+  // Si no se provee codigoDisplay, usa cveActivo como fallback
 
   // Formato SIGA limpio (sin nota, sin tipo)
   String toLineTxt() {
