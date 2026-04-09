@@ -372,6 +372,9 @@ class _InventarioScreenState extends State<InventarioScreen> {
           BarcodeFormat.dataMatrix, BarcodeFormat.qrCode,
         ],
         autoStart: true,
+        // Autofocus continuo — mejora lectura de códigos pequeños
+        // como las etiquetas nuevas CENAM (Code 128 compacto)
+        useNewCameraSelector: true,
       );
     });
   }

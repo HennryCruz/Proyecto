@@ -34,14 +34,26 @@ class OcrService {
   OcrService._();
 
   // Patrones de códigos válidos para CENAM
-  // Código nuevo: I + 5 dígitos (I18045) o C/P + 5 dígitos
+  // Código nuevo: I + 5 dígitos (I18045)
+  //   — OCR frecuentemente lee la I como 1 o l → corrección automática
   // Código antiguo: 12 dígitos numéricos (510103039102)
   static final _patrones = [
-    RegExp(r'\b[IiCcPp]\d{5}\b'),          // I18045, C00123, P00001
-    RegExp(r'\b\d{12}\b'),                   // 510103039102
-    RegExp(r'\b\d{10,14}\b'),               // rangos numéricos largos
-    RegExp(r'\b[A-Z0-9]{8,}\b'),            // alfanuméricos largos
+    RegExp(r'\b[IiCcPp1l]\d{5}\b'),  // I18045 — incluye 1 y l como I
+    RegExp(r'\b\d{12}\b'),            // 510103039102
+    RegExp(r'\b\d{10,14}\b'),         // rangos numéricos largos
+    RegExp(r'\b[A-Z0-9]{6,}\b'),      // alfanuméricos
   ];
+
+  // Corrección específica para etiquetas nuevas CENAM:
+  // El OCR lee "I" como "1" o "l" — normalizamos al formato correcto
+  String _corregirCodigo(String codigo) {
+    // Si empieza con 1 o l seguido de 5 dígitos → probablemente es I
+    if (RegExp(r'^[1l]\d{5}$').hasMatch(codigo)) {
+      return 'I${codigo.substring(1)}';
+    }
+    // Normalizar a mayúsculas
+    return codigo.toUpperCase();
+  }
 
   // ── Proceso principal ──────────────────────────────────────────
 
@@ -92,10 +104,12 @@ class OcrService {
             height: imagen.height >= imagen.width ? 1920 : -1);
       }
 
-      // Recortar zona de interés: franja central-inferior (donde está el número)
-      // Basado en las etiquetas CENAM: número impreso en el tercio inferior
-      final roiTop    = (imagen.height * 0.45).toInt();
-      final roiHeight = (imagen.height * 0.55).toInt();
+      // Recortar zona de interés más amplia para cubrir ambos tipos:
+      // — Etiqueta nueva: I18045 está en el centro-inferior
+      // — Etiqueta vieja: número de 12 dígitos en el tercio inferior
+      // Usamos el 40%-95% vertical para capturar ambos casos
+      final roiTop    = (imagen.height * 0.35).toInt();
+      final roiHeight = (imagen.height * 0.60).toInt();
       final roi = img.copyCrop(imagen,
           x: 0, y: roiTop,
           width: imagen.width, height: roiHeight);
@@ -150,15 +164,16 @@ class OcrService {
       for (final patron in _patrones) {
         final matches = patron.allMatches(limpio);
         for (final m in matches) {
-          final codigo = m.group(0)!;
-          // Evitar falsos positivos: no incluir fechas (8 dígitos tipo 18012013)
+          final raw    = m.group(0)!;
+          final codigo = _corregirCodigo(raw);
           if (_esFecha(codigo)) continue;
           encontrados.add(codigo);
         }
       }
     }
 
-    // Ordenar: códigos CENAM (I/C/P + dígitos) primero, luego 12 dígitos
+    // Ordenar: códigos CENAM nuevos (I/C/P + 5 dígitos) primero
+    // luego 12 dígitos, luego el resto
     final lista = encontrados.toList();
     lista.sort((a, b) {
       final esNuevoA = RegExp(r'^[ICP]\d{5}$').hasMatch(a);
@@ -170,10 +185,10 @@ class OcrService {
       if (!esNuevoA && esNuevoB) return 1;
       if (es12A    && !es12B)   return -1;
       if (!es12A   && es12B)    return 1;
-      return b.length.compareTo(a.length); // Más largo = más específico
+      return b.length.compareTo(a.length);
     });
 
-    return lista.take(5).toList(); // Máximo 5 candidatos
+    return lista.take(5).toList();
   }
 
   bool _esFecha(String s) {
