@@ -51,9 +51,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
   String _descMostrada      = '';
   bool   _esDuplicadoVisor  = false;
   bool   _noEncontrado      = false;
-  // Debounce: evita doble registro con DetectionSpeed.fast
+  double _nivelZoom         = 1.0; // zoom actual del escáner
   DateTime? _ultimoEscaneo;
-  // 600ms debounce — suficiente para evitar dobles sin frenar el ritmo
   static const _debounceMs = 600;
 
   // Vibración disponible
@@ -377,15 +376,21 @@ class _InventarioScreenState extends State<InventarioScreen> {
         ],
         autoStart: true,
         useNewCameraSelector: true,
+        // Zoom inicial en 1.0 — el usuario puede acercar manualmente
+        // para etiquetas pequeñas con el gesto de pinch
+        zoomScale: 1.0,
       );
     });
   }
 
   void _cerrarEscaner() {
-    WakelockPlus.disable(); // Restaurar comportamiento normal
+    WakelockPlus.disable();
     _scannerCtrl?.dispose();
     _scannerCtrl = null;
-    setState(() => _escaneando = false);
+    setState(() {
+      _escaneando  = false;
+      _nivelZoom   = 1.0;
+    });
   }
 
   void _onDetected(BarcodeCapture capture) {
@@ -1093,12 +1098,17 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   Widget _buildEscaner() {
     return Stack(children: [
-      // Cámara a pantalla completa — sin overlay oscuro
-      // Sin scanWindow fijo — ML Kit escanea toda la pantalla
-      // El scanWindow con coordenadas relativas no funciona en mobile_scanner v5
-      MobileScanner(
-        controller: _scannerCtrl!,
-        onDetect: _onDetected,
+      // Pinch-to-zoom sobre la cámara
+      GestureDetector(
+        onScaleUpdate: (details) {
+          final zoom = (_nivelZoom * details.scale).clamp(1.0, 4.0);
+          _scannerCtrl?.setZoomScale(zoom);
+          setState(() => _nivelZoom = zoom);
+        },
+        child: MobileScanner(
+          controller: _scannerCtrl!,
+          onDetect: _onDetected,
+        ),
       ),
 
       // Línea de escaneo animada (visual, no restrictiva)
@@ -1135,15 +1145,60 @@ class _InventarioScreenState extends State<InventarioScreen> {
             padding: const EdgeInsets.symmetric(
                 horizontal: 16, vertical: 12),
             child: Row(children: [
+              // Linterna
               GestureDetector(
                 onTap: () => _scannerCtrl?.toggleTorch(),
                 child: Container(
                   padding: const EdgeInsets.all(10),
-                  margin: const EdgeInsets.only(right: 12),
+                  margin: const EdgeInsets.only(right: 8),
                   decoration: BoxDecoration(color: Colors.white24,
                       borderRadius: BorderRadius.circular(8)),
                   child: const Icon(Icons.flashlight_on,
                       color: Colors.white, size: 26),
+                ),
+              ),
+              // Zoom -
+              GestureDetector(
+                onTap: () {
+                  final z = (_nivelZoom - 0.5).clamp(1.0, 4.0);
+                  _scannerCtrl?.setZoomScale(z);
+                  setState(() => _nivelZoom = z);
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  margin: const EdgeInsets.only(right: 4),
+                  decoration: BoxDecoration(color: Colors.white24,
+                      borderRadius: BorderRadius.circular(8)),
+                  child: const Icon(Icons.zoom_out,
+                      color: Colors.white, size: 22),
+                ),
+              ),
+              // Indicador de zoom
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 10),
+                decoration: BoxDecoration(color: Colors.white12,
+                    borderRadius: BorderRadius.circular(8)),
+                child: Text(
+                  '${_nivelZoom.toStringAsFixed(1)}×',
+                  style: const TextStyle(color: Colors.white,
+                      fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+              ),
+              // Zoom +
+              GestureDetector(
+                onTap: () {
+                  final z = (_nivelZoom + 0.5).clamp(1.0, 4.0);
+                  _scannerCtrl?.setZoomScale(z);
+                  setState(() => _nivelZoom = z);
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  margin: const EdgeInsets.only(left: 4, right: 8),
+                  decoration: BoxDecoration(color: Colors.white24,
+                      borderRadius: BorderRadius.circular(8)),
+                  child: const Icon(Icons.zoom_in,
+                      color: Colors.white, size: 22),
                 ),
               ),
               Expanded(child: ElevatedButton.icon(
