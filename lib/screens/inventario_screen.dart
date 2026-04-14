@@ -53,7 +53,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
   bool   _noEncontrado      = false;
   // Debounce: evita doble registro con DetectionSpeed.fast
   DateTime? _ultimoEscaneo;
-  static const _debounceMs = 1200;
+  // 600ms debounce — suficiente para evitar dobles sin frenar el ritmo
+  static const _debounceMs = 600;
 
   // Vibración disponible
   bool _vibracionDisponible = false;
@@ -356,7 +357,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
       _mostrarError('Selecciona una localización primero');
       return;
     }
-    WakelockPlus.enable(); // Pantalla siempre encendida al escanear
+    WakelockPlus.enable();
     setState(() {
       _escaneando       = true;
       _codigoMostrado   = '';
@@ -365,15 +366,15 @@ class _InventarioScreenState extends State<InventarioScreen> {
       _noEncontrado     = false;
       _scannerCtrl      = MobileScannerController(
         detectionSpeed: DetectionSpeed.noDuplicates,
+        // Solo los formatos que realmente usan las etiquetas CENAM:
+        // Code 128 (etiquetas nuevas I18045 y antiguas 12 dígitos)
+        // EAN-13 (etiquetas antiguas en algunos casos)
+        // Menos formatos = ML Kit procesa más rápido por frame
         formats: const [
-          BarcodeFormat.code128, BarcodeFormat.code39,
-          BarcodeFormat.ean13,   BarcodeFormat.ean8,
-          BarcodeFormat.itf,     BarcodeFormat.codabar,
-          BarcodeFormat.dataMatrix, BarcodeFormat.qrCode,
+          BarcodeFormat.code128,
+          BarcodeFormat.ean13,
         ],
         autoStart: true,
-        // Autofocus continuo — mejora lectura de códigos pequeños
-        // como las etiquetas nuevas CENAM (Code 128 compacto)
         useNewCameraSelector: true,
       );
     });
@@ -390,7 +391,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
     final codigo = capture.barcodes.firstOrNull?.rawValue;
     if (codigo == null || codigo.isEmpty) return;
 
-    // Debounce: ignorar si se detectó el mismo código hace menos de 1.2s
     final ahora = DateTime.now();
     if (_ultimoEscaneo != null &&
         ahora.difference(_ultimoEscaneo!).inMilliseconds < _debounceMs) {
@@ -1093,7 +1093,13 @@ class _InventarioScreenState extends State<InventarioScreen> {
   Widget _buildEscaner() {
     return Stack(children: [
       // Cámara a pantalla completa — sin overlay oscuro
-      MobileScanner(controller: _scannerCtrl!, onDetect: _onDetected),
+      // scanWindow: franja central 80% ancho x 40% alto
+      // ML Kit solo analiza esa zona → más rápido en etiquetas pequeñas
+      MobileScanner(
+        controller: _scannerCtrl!,
+        onDetect: _onDetected,
+        scanWindow: Rect.fromLTRB(0.1, 0.25, 0.9, 0.75),
+      ),
 
       // Línea de escaneo animada (visual, no restrictiva)
       const Positioned.fill(child: _ScanLine()),
