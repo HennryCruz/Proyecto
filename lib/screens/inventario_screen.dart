@@ -366,13 +366,14 @@ class _InventarioScreenState extends State<InventarioScreen> {
       _noEncontrado     = false;
       _scannerCtrl      = MobileScannerController(
         detectionSpeed: DetectionSpeed.noDuplicates,
-        // Solo los formatos que realmente usan las etiquetas CENAM:
-        // Code 128 (etiquetas nuevas I18045 y antiguas 12 dígitos)
-        // EAN-13 (etiquetas antiguas en algunos casos)
-        // Menos formatos = ML Kit procesa más rápido por frame
+        // Formatos presentes en etiquetas CENAM nuevas y antiguas
         formats: const [
-          BarcodeFormat.code128,
+          BarcodeFormat.code128,  // etiquetas nuevas (I18045) y antiguas (12 dígitos)
+          BarcodeFormat.code39,
           BarcodeFormat.ean13,
+          BarcodeFormat.ean8,
+          BarcodeFormat.itf,
+          BarcodeFormat.codabar,
         ],
         autoStart: true,
         useNewCameraSelector: true,
@@ -1093,12 +1094,11 @@ class _InventarioScreenState extends State<InventarioScreen> {
   Widget _buildEscaner() {
     return Stack(children: [
       // Cámara a pantalla completa — sin overlay oscuro
-      // scanWindow: franja central 80% ancho x 40% alto
-      // ML Kit solo analiza esa zona → más rápido en etiquetas pequeñas
+      // Sin scanWindow fijo — ML Kit escanea toda la pantalla
+      // El scanWindow con coordenadas relativas no funciona en mobile_scanner v5
       MobileScanner(
         controller: _scannerCtrl!,
         onDetect: _onDetected,
-        scanWindow: Rect.fromLTRB(0.1, 0.25, 0.9, 0.75),
       ),
 
       // Línea de escaneo animada (visual, no restrictiva)
