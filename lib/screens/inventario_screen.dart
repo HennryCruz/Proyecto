@@ -376,9 +376,6 @@ class _InventarioScreenState extends State<InventarioScreen> {
         ],
         autoStart: true,
         useNewCameraSelector: true,
-        // Zoom inicial en 1.0 — el usuario puede acercar manualmente
-        // para etiquetas pequeñas con el gesto de pinch
-        zoomScale: 1.0,
       );
     });
   }
