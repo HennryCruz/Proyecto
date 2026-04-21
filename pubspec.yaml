@@ -22,6 +22,11 @@ dependencies:
   image_picker: ^1.1.2
   image: ^4.2.0
   pdfx: ^2.6.0
+  # Sync y seguridad
+  http: ^1.2.0
+  shared_preferences: ^2.2.3
+  device_info_plus: ^10.1.0
+  crypto: ^3.0.3
 
 dev_dependencies:
   flutter_test:
@@ -34,5 +39,4 @@ flutter:
     - assets/localizaciones.txt
     - assets/activos.txt
     - assets/activos_teorico.csv
-    # Mapas de edificios — carpeta completa
     - assets/mapas/

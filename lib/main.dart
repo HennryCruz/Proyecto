@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'screens/dispositivo_screen.dart';
 import 'screens/inventario_screen.dart';
 
 void main() {
@@ -8,7 +9,6 @@ void main() {
 class InventarioCENAMApp extends StatefulWidget {
   const InventarioCENAMApp({super.key});
 
-  // Permite cambiar el tema desde cualquier parte de la app
   static _InventarioCENAMAppState? of(BuildContext context) =>
       context.findAncestorStateOfType<_InventarioCENAMAppState>();
 
@@ -17,7 +17,8 @@ class InventarioCENAMApp extends StatefulWidget {
 }
 
 class _InventarioCENAMAppState extends State<InventarioCENAMApp> {
-  ThemeMode _themeMode = ThemeMode.system;
+  ThemeMode _themeMode     = ThemeMode.system;
+  bool      _dispositivoOk = false;
 
   void toggleTheme() {
     setState(() {
@@ -35,8 +36,6 @@ class _InventarioCENAMAppState extends State<InventarioCENAMApp> {
       title: 'Inventario CENAM',
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,
-
-      // ── Tema claro ──────────────────────────────────────────────
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF1B4F8A),
@@ -52,15 +51,12 @@ class _InventarioCENAMAppState extends State<InventarioCENAMApp> {
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF1B4F8A),
             foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(
-                horizontal: 20, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8)),
           ),
         ),
       ),
-
-      // ── Tema oscuro ─────────────────────────────────────────────
       darkTheme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF5B9BD5),
@@ -73,22 +69,24 @@ class _InventarioCENAMAppState extends State<InventarioCENAMApp> {
           foregroundColor: Colors.white,
           elevation: 2,
         ),
-        cardTheme: const CardThemeData(
-          color: Color(0xFF1E1E1E),
-        ),
+        cardTheme: const CardThemeData(color: Color(0xFF1E1E1E)),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF5B9BD5),
             foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(
-                horizontal: 20, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8)),
           ),
         ),
       ),
-
-      home: const InventarioScreen(),
+      // Si el dispositivo no está configurado → pantalla de setup
+      // Si ya está configurado → pantalla principal
+      home: _dispositivoOk
+          ? const InventarioScreen()
+          : DispositivoScreen(
+              onConfirmado: () => setState(() => _dispositivoOk = true),
+            ),
     );
   }
 }

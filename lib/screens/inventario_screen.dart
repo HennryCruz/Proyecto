@@ -6,11 +6,14 @@ import 'package:vibration/vibration.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../main.dart';
+import '../config/supabase_config.dart';
 import '../services/catalogo_service.dart';
 import '../services/excel_service.dart';
 import '../services/inventario_service.dart';
+import '../services/sync_service.dart';
 import '../services/teorico_service.dart';
 import '../widgets/manual_entry_dialog.dart';
+import '../widgets/sync_status_widget.dart';
 import 'checklist_screen.dart';
 import 'dashboard_screen.dart';
 import 'historial_screen.dart';
@@ -205,14 +208,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
         _registros.add(reg);
         _escaneadosEnSesion.add(cveInterno.toUpperCase());
       });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('⚠ $display registrado como no catalogado (NC)'),
-          backgroundColor: Colors.amber.shade700,
-          duration: const Duration(seconds: 3),
-        ));
-      }
-      return;
+      SyncService().enviarRegistro(reg).ignore();
     }
 
     // ── Catalogado ─────────────────────────────────────────────────
@@ -242,6 +238,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
       _registros.add(reg);
       _escaneadosEnSesion.add(cveInterno.toUpperCase());
     });
+    // Enviar a Supabase en background (no bloquea el escaneo)
+    SyncService().enviarRegistro(reg).ignore();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('✓ $display  $desc'),
@@ -465,6 +463,8 @@ class _InventarioScreenState extends State<InventarioScreen> {
       appBar: AppBar(
         title: const Text('Inventario CENAM'),
         actions: [
+          // Estado de sincronización
+          const SyncStatusWidget(),
           // Modo oscuro
           IconButton(
             icon: Icon(
