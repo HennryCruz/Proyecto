@@ -98,10 +98,15 @@ class _DispositivoScreenState extends State<DispositivoScreen> {
   // ── Vincular dispositivo con usuario seleccionado ─────────────
 
   Future<void> _vincular() async {
-    if (_usuarioSeleccionadoId == null) {
+    if (_usuarioSeleccionadoNombre == null) {
       setState(() => _error = 'Selecciona tu nombre');
       return;
     }
+    // Si no hay ID (modo offline), usar nombre como identificador temporal
+    final idParaUsar = (_usuarioSeleccionadoId != null &&
+            _usuarioSeleccionadoId!.isNotEmpty)
+        ? _usuarioSeleccionadoId!
+        : _usuarioSeleccionadoNombre!;
 
     setState(() { _cargando = true; _error = null; });
 
@@ -109,7 +114,7 @@ class _DispositivoScreenState extends State<DispositivoScreen> {
 
     // Intentar vincular en Supabase
     final resultado = await SyncService().vincularDispositivo(
-      usuarioId:     _usuarioSeleccionadoId!,
+      usuarioId:     idParaUsar,
       usuarioNombre: _usuarioSeleccionadoNombre!,
       deviceHash:    hash,
     );
@@ -126,14 +131,14 @@ class _DispositivoScreenState extends State<DispositivoScreen> {
 
     // Guardar localmente
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefUsuarioId,     _usuarioSeleccionadoId!);
+    await prefs.setString(_prefUsuarioId,     idParaUsar);
     await prefs.setString(_prefUsuarioNombre, _usuarioSeleccionadoNombre!);
     await prefs.setString(_prefDeviceHash,    hash);
     await prefs.setBool  (_prefVinculado,     true);
 
-    // Inicializar sync con el usuario vinculado
+    // Inicializar sync
     await SyncService().inicializar(
-      usuarioId:     _usuarioSeleccionadoId!,
+      usuarioId:     idParaUsar,
       usuarioNombre: _usuarioSeleccionadoNombre!,
       deviceHash:    hash,
     );
@@ -208,8 +213,9 @@ class _DispositivoScreenState extends State<DispositivoScreen> {
 
                   return GestureDetector(
                     onTap: () => setState(() {
-                      _usuarioSeleccionadoId     = u['id']!.isNotEmpty
-                          ? u['id'] : null;
+                      // Guardar siempre el id (puede ser vacío en offline)
+                      // y siempre el nombre — el botón se habilita con el nombre
+                      _usuarioSeleccionadoId     = u['id'];
                       _usuarioSeleccionadoNombre = u['nombre'];
                       _error = null;
                     }),
@@ -291,7 +297,7 @@ class _DispositivoScreenState extends State<DispositivoScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _usuarioSeleccionadoId != null
+                  onPressed: _usuarioSeleccionadoNombre != null
                       ? _vincular : null,
                   icon: const Icon(Icons.lock_outline),
                   label: Text(
