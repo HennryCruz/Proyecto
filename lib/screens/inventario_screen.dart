@@ -1244,19 +1244,25 @@ class _InventarioScreenState extends State<InventarioScreen> {
       // Pinch-to-zoom + tap para enfocar
       GestureDetector(
         onScaleUpdate: (details) {
-          final zoom = (_nivelZoom * details.scale).clamp(1.0, 4.0);
-          _scannerCtrl?.setZoomScale(zoom);
-          setState(() => _nivelZoom = zoom);
+          final nuevoZoom = (_nivelZoom * details.scale).clamp(1.0, 4.0);
+          if (nuevoZoom <= 1.05) {
+            // Cerca de 1x — usar resetZoomScale para evitar ultra-wide
+            _scannerCtrl?.resetZoomScale();
+            setState(() => _nivelZoom = 1.0);
+          } else {
+            _scannerCtrl?.setZoomScale(nuevoZoom);
+            setState(() => _nivelZoom = nuevoZoom);
+          }
         },
         onTapUp: (details) {
-          // Tap para enfocar — igual que app de cámara
+          // Tap para forzar autofocus del hardware
+          // mobile_scanner v5 no soporta setFocusPoint — forzamos
+          // reactivando el escáner brevemente para que recalibres el foco
           setState(() => _focusTap = details.localPosition);
-          // El autofocus del dispositivo se activa al pausar/reanudar
           _scannerCtrl?.stop();
-          Future.delayed(const Duration(milliseconds: 100), () {
+          Future.delayed(const Duration(milliseconds: 200), () {
             if (_escaneando && mounted) {
               _scannerCtrl?.start();
-              // Quitar indicador de foco después de 1.5s
               Future.delayed(const Duration(milliseconds: 1500), () {
                 if (mounted) setState(() => _focusTap = null);
               });
@@ -1333,7 +1339,11 @@ class _InventarioScreenState extends State<InventarioScreen> {
               GestureDetector(
                 onTap: () {
                   final z = (_nivelZoom - 0.5).clamp(1.0, 4.0);
-                  _scannerCtrl?.setZoomScale(z);
+                  if (z <= 1.0) {
+                    _scannerCtrl?.resetZoomScale();
+                  } else {
+                    _scannerCtrl?.setZoomScale(z);
+                  }
                   setState(() => _nivelZoom = z);
                 },
                 child: Container(
