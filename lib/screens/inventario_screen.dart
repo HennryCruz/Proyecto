@@ -54,9 +54,11 @@ class _InventarioScreenState extends State<InventarioScreen> {
   String _descMostrada      = '';
   bool   _esDuplicadoVisor  = false;
   bool   _noEncontrado      = false;
-  double _nivelZoom         = 1.0; // zoom actual del escáner
+  double _nivelZoom         = 1.0;
   DateTime? _ultimoEscaneo;
   static const _debounceMs = 600;
+  Timer?  _refreshTimer; // Refresh automático cada 10s sin lectura
+  Offset? _focusTap;    // Punto de tap para enfocar
 
   // Vibración disponible
   bool _vibracionDisponible = false;
@@ -75,10 +77,14 @@ class _InventarioScreenState extends State<InventarioScreen> {
       setState(() => _estadoCarga = 'Cargando catálogo de activos...');
       await _teorico.cargar();
 
-      setState(() => _estadoCarga = 'Leyendo registros anteriores...');
-      final regs = await _inventario.cargarRegistros();
+      setState(() => _estadoCarga = 'Leyendo registros del día...');
 
-      // Verificar vibración
+      // ── Bug fix: cargar solo los registros de HOY ─────────────────
+      // El archivo ALM_Inventarios.txt acumula todo — para el conteo
+      // diario usamos solo el archivo de la sesión del día actual.
+      // Si no existe aún (primer escaneo del día), empezamos en 0.
+      final regs = await _inventario.cargarRegistrosHoy();
+
       _vibracionDisponible = await Vibration.hasVibrator() ?? false;
 
       if (mounted) {
@@ -86,6 +92,11 @@ class _InventarioScreenState extends State<InventarioScreen> {
           _registros = regs;
           for (final r in regs) {
             _escaneadosEnSesion.add(r.cveActivo.toUpperCase());
+            // También indexar código anterior para evitar duplicados cruzados
+            final activo = _teorico.buscarPorCodigo(r.cveActivo);
+            if (activo != null && activo.codigoAnterior.isNotEmpty) {
+              _escaneadosEnSesion.add(activo.codigoAnterior.toUpperCase());
+            }
           }
           _estadoCarga = 'Listo: ${_catalogo.totalLocalizaciones} locs · '
               '${_catalogo.totalActivos} activos';
@@ -355,6 +366,16 @@ class _InventarioScreenState extends State<InventarioScreen> {
       return;
     }
     WakelockPlus.enable();
+    // Refresh automático: si lleva 10s sin leer nada, reinicia el escáner
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (_escaneando && _ultimoEscaneo != null) {
+        final seg = DateTime.now()
+            .difference(_ultimoEscaneo!)
+            .inSeconds;
+        if (seg >= 10) _refrescarEscaner();
+      }
+    });
     setState(() {
       _escaneando       = true;
       _codigoMostrado   = '';
@@ -380,11 +401,22 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   void _cerrarEscaner() {
     WakelockPlus.disable();
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
     _scannerCtrl?.dispose();
     _scannerCtrl = null;
     setState(() {
-      _escaneando  = false;
-      _nivelZoom   = 1.0;
+      _escaneando = false;
+      _nivelZoom  = 1.0;
+    });
+  }
+
+  // Reinicio silencioso del escáner tras 10s sin lectura
+  void _refrescarEscaner() {
+    if (!_escaneando || _scannerCtrl == null) return;
+    _scannerCtrl?.stop();
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (_escaneando && mounted) _scannerCtrl?.start();
     });
   }
 
@@ -743,8 +775,26 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
         return Dismissible(
           key: Key('${r.cveActivo}_${r.fecha.millisecondsSinceEpoch}'),
-          direction: DismissDirection.endToStart,
+          // Ambas direcciones: izquierda→derecha = editar ubicación
+          //                    derecha→izquierda  = eliminar
+          direction: DismissDirection.horizontal,
           background: Container(
+            // Fondo izquierda→derecha: editar ubicación (azul)
+            alignment: Alignment.centerLeft,
+            color: Colors.blue.shade700,
+            padding: const EdgeInsets.only(left: 20),
+            child: const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.edit_location_alt_outlined, color: Colors.white),
+                SizedBox(height: 2),
+                Text('Editar\nubicación', textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white, fontSize: 10)),
+              ],
+            ),
+          ),
+          secondaryBackground: Container(
+            // Fondo derecha→izquierda: eliminar (rojo)
             alignment: Alignment.centerRight,
             color: Colors.red.shade700,
             padding: const EdgeInsets.only(right: 20),
@@ -758,23 +808,28 @@ class _InventarioScreenState extends State<InventarioScreen> {
               ],
             ),
           ),
-          // Confirmar al deslizar
-          confirmDismiss: (_) => _confirmarEliminar(r.cveActivo),
+          confirmDismiss: (direction) async {
+            if (direction == DismissDirection.startToEnd) {
+              // Izquierda→derecha: editar ubicación — NO eliminar
+              await _editarUbicacion(realIdx);
+              return false; // Nunca eliminar con este gesto
+            } else {
+              // Derecha→izquierda: confirmar eliminación
+              return _confirmarEliminar(r.cveActivo);
+            }
+          },
           onDismissed: (_) => _eliminarRegistro(realIdx),
           child: ListTile(
             dense: true,
             tileColor: tileColor,
-            // Borde izquierdo morado si tiene nota
             contentPadding: EdgeInsets.only(
               left: tieneNota ? 0 : 16,
               right: 8,
             ),
             leading: Row(mainAxisSize: MainAxisSize.min, children: [
-              // Barra lateral morada si hay nota
               if (tieneNota)
                 Container(
-                  width: 4,
-                  height: 56,
+                  width: 4, height: 56,
                   color: Colors.purple.shade400,
                 ),
               if (tieneNota) const SizedBox(width: 8),
@@ -871,36 +926,21 @@ class _InventarioScreenState extends State<InventarioScreen> {
                     style: TextStyle(color: Colors.blue.shade700,
                         fontSize: 10, fontWeight: FontWeight.w500)),
                 const SizedBox(height: 4),
-                Row(mainAxisSize: MainAxisSize.min, children: [
-                  // Botón nota
-                  GestureDetector(
-                    onTap: () => _editarNota(realIdx),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      child: Icon(
-                        tieneNota
-                            ? Icons.edit_note
-                            : Icons.note_add_outlined,
-                        color: tieneNota
-                            ? Colors.purple.shade400
-                            : Colors.grey.shade400,
-                        size: 20,
-                      ),
+                // Solo botón de nota — eliminar es por swipe ←
+                // editar ubicación es por swipe →
+                GestureDetector(
+                  onTap: () => _editarNota(realIdx),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Icon(
+                      tieneNota ? Icons.edit_note : Icons.note_add_outlined,
+                      color: tieneNota
+                          ? Colors.purple.shade400
+                          : Colors.grey.shade400,
+                      size: 22,
                     ),
                   ),
-                  // Botón eliminar con confirmación
-                  GestureDetector(
-                    onTap: () async {
-                      final ok = await _confirmarEliminar(r.cveActivo);
-                      if (ok == true) _eliminarRegistro(realIdx);
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      child: Icon(Icons.remove_circle_outline,
-                          color: Colors.red.shade300, size: 20),
-                    ),
-                  ),
-                ]),
+                ),
               ],
             ),
           ),
@@ -909,7 +949,112 @@ class _InventarioScreenState extends State<InventarioScreen> {
     );
   }
 
-  // ── Confirmar eliminación ─────────────────────────────────────────
+  // ── Editar ubicación de un registro (swipe izquierda→derecha) ────
+
+  Future<void> _editarUbicacion(int index) async {
+    final r    = _registros[index];
+    final ctrl = TextEditingController(text: r.localizacion);
+
+    final nuevaLoc = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Row(children: [
+          Icon(Icons.edit_location_alt_outlined,
+              color: Colors.blue.shade700),
+          const SizedBox(width: 8),
+          Expanded(child: Text(r.codigoDisplay,
+              style: const TextStyle(fontSize: 15))),
+        ]),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('Ubicación actual: ${r.localizacion}',
+              style: TextStyle(color: Colors.grey.shade600,
+                  fontSize: 13)),
+          const SizedBox(height: 4),
+          Text(r.localizacion.isNotEmpty
+              ? _catalogo.descripcionLocalizacion(r.localizacion)
+              : '',
+              style: TextStyle(color: Colors.blue.shade700,
+                  fontSize: 12)),
+          const SizedBox(height: 16),
+          TextField(
+            controller: ctrl,
+            autofocus: true,
+            textCapitalization: TextCapitalization.characters,
+            decoration: const InputDecoration(
+              labelText: 'Nueva ubicación',
+              hintText: 'Ej: B030',
+              border: OutlineInputBorder(),
+            ),
+            onSubmitted: (v) => Navigator.pop(context, v.trim()),
+          ),
+        ]),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, ctrl.text.trim()),
+            child: const Text('Actualizar'),
+          ),
+        ],
+      ),
+    );
+
+    if (nuevaLoc == null || nuevaLoc.isEmpty ||
+        nuevaLoc == r.localizacion) return;
+
+    // Verificar que la nueva localización existe
+    final desc = _catalogo.descripcionLocalizacion(nuevaLoc);
+    if (desc.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('⚠ Localización $nuevaLoc no encontrada en catálogo'),
+          backgroundColor: Colors.orange.shade700,
+        ));
+      }
+      return;
+    }
+
+    // Actualizar en memoria — TODOS los registros con ese código
+    // (cubre duplicados entre código nuevo y anterior)
+    final cveUpper = r.cveActivo.toUpperCase();
+    setState(() {
+      for (int i = 0; i < _registros.length; i++) {
+        final reg = _registros[i];
+        final activo = _teorico.buscarPorCodigo(reg.cveActivo);
+        final mismo = reg.cveActivo.toUpperCase() == cveUpper ||
+            (activo != null &&
+                (activo.codigoNuevo.toUpperCase() == cveUpper ||
+                 activo.codigoAnterior.toUpperCase() == cveUpper));
+        if (mismo) {
+          _registros[i] = RegistroInventario(
+            localizacion:  nuevaLoc,
+            cveActivo:     reg.cveActivo,
+            codigoDisplay: reg.codigoDisplay,
+            fecha:         reg.fecha,
+            nota:          reg.nota,
+            tipo:          reg.tipo,
+          );
+        }
+      }
+    });
+
+    // Persistir cambio en archivos locales
+    await _inventario.actualizarUbicacion(r.cveActivo, nuevaLoc);
+
+    // Sincronizar cambio de ubicación con Supabase
+    SyncService().actualizarUbicacionRemota(
+        cveActivo: r.cveActivo,
+        nuevaLocalizacion: nuevaLoc).ignore();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('✓ ${r.codigoDisplay} movido a $nuevaLoc — $desc'),
+        backgroundColor: Colors.blue.shade700,
+        duration: const Duration(seconds: 3),
+      ));
+    }
+  }
 
   Future<bool> _confirmarEliminar(String cveActivo) async {
     final desc = _catalogo.descripcionActivo(cveActivo);
@@ -1095,12 +1240,27 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
   Widget _buildEscaner() {
     return Stack(children: [
-      // Pinch-to-zoom sobre la cámara
+      // Pinch-to-zoom + tap para enfocar
       GestureDetector(
         onScaleUpdate: (details) {
           final zoom = (_nivelZoom * details.scale).clamp(1.0, 4.0);
           _scannerCtrl?.setZoomScale(zoom);
           setState(() => _nivelZoom = zoom);
+        },
+        onTapUp: (details) {
+          // Tap para enfocar — igual que app de cámara
+          setState(() => _focusTap = details.localPosition);
+          // El autofocus del dispositivo se activa al pausar/reanudar
+          _scannerCtrl?.stop();
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (_escaneando && mounted) {
+              _scannerCtrl?.start();
+              // Quitar indicador de foco después de 1.5s
+              Future.delayed(const Duration(milliseconds: 1500), () {
+                if (mounted) setState(() => _focusTap = null);
+              });
+            }
+          });
         },
         child: MobileScanner(
           controller: _scannerCtrl!,
@@ -1110,6 +1270,20 @@ class _InventarioScreenState extends State<InventarioScreen> {
 
       // Línea de escaneo animada (visual, no restrictiva)
       const Positioned.fill(child: _ScanLine()),
+
+      // Indicador visual de foco al tocar pantalla
+      if (_focusTap != null)
+        Positioned(
+          left: _focusTap!.dx - 30,
+          top:  _focusTap!.dy - 30,
+          child: Container(
+            width: 60, height: 60,
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.white, width: 1.5),
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+        ),
 
       // Info superior
       Positioned(

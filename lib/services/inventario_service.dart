@@ -142,6 +142,7 @@ class InventarioService {
 
   // ── Sesión activa ─────────────────────────────────────────────────
 
+  // Carga TODOS los registros acumulados (para historial y SIGA)
   Future<List<RegistroInventario>> cargarRegistros() async {
     try {
       final file = await _archivoActualFile;
@@ -154,6 +155,62 @@ class InventarioService {
     } catch (_) {
       return [];
     }
+  }
+
+  // Carga solo los registros de HOY — para el contador diario
+  // Empieza en 0 cada día aunque el archivo acumulado tenga miles
+  Future<List<RegistroInventario>> cargarRegistrosHoy() async {
+    try {
+      final d    = await _dir;
+      final hoy  = DateFormat('yyyyMMdd').format(DateTime.now());
+      final file = File('${d.path}/Inventario_$hoy.txt');
+      if (!await file.exists()) return []; // Primer escaneo del día → 0
+      final lines = await file.readAsLines();
+      return lines
+          .map(RegistroInventario.fromLine)
+          .whereType<RegistroInventario>()
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // Actualiza la ubicación de un registro existente en todos los archivos
+  // Usado cuando el usuario corrige una ubicación equivocada
+  Future<void> actualizarUbicacion(
+      String cveActivo, String nuevaLocalizacion) async {
+    // 1. Actualizar en archivo activo
+    await _reescribirConUbicacion(
+        await _archivoActualFile, cveActivo, nuevaLocalizacion);
+
+    // 2. Actualizar en archivo de hoy
+    final d   = await _dir;
+    final hoy = DateFormat('yyyyMMdd').format(DateTime.now());
+    final hoyFile = File('${d.path}/Inventario_$hoy.txt');
+    if (await hoyFile.exists()) {
+      await _reescribirConUbicacion(hoyFile, cveActivo, nuevaLocalizacion);
+    }
+  }
+
+  Future<void> _reescribirConUbicacion(
+      File file, String cveActivo, String nuevaLoc) async {
+    if (!await file.exists()) return;
+    final lines  = await file.readAsLines();
+    final nuevas = lines.map((l) {
+      final r = RegistroInventario.fromLine(l);
+      if (r == null) return l;
+      if (r.cveActivo.toUpperCase() != cveActivo.toUpperCase()) return l;
+      // Reemplazar con nueva ubicación
+      return RegistroInventario(
+        localizacion: nuevaLoc,
+        cveActivo:    r.cveActivo,
+        codigoDisplay: r.codigoDisplay,
+        fecha:        r.fecha,
+        nota:         r.nota,
+        tipo:         r.tipo,
+      ).toLineCompleto();
+    }).toList();
+    await file.writeAsString(nuevas.join('\n') + '\n');
   }
 
   Future<void> agregarRegistro(RegistroInventario r) async {

@@ -42,6 +42,7 @@ class SyncService {
   String? _deviceHash;
 
   Timer?  _timer;
+  Timer?  _pingTimer;
   bool    _sincronizando = false;
 
   final _statusCtrl = StreamController<SyncStatus>.broadcast();
@@ -73,10 +74,51 @@ class SyncService {
       const Duration(seconds: SupabaseConfig.syncIntervalSeg),
       (_) => sincronizarPendientes(),
     );
+    // Ping anti-pausa: cada 4 días evita que Supabase pause el proyecto
+    _pingTimer?.cancel();
+    _pingTimer = Timer.periodic(
+      const Duration(days: 4),
+      (_) => _ping(),
+    );
     _emitir(const SyncStatus(estado: EstadoSync.ok));
   }
 
-  void detener() { _timer?.cancel(); _timer = null; }
+  void detener() {
+    _timer?.cancel();
+    _pingTimer?.cancel();
+    _timer = _pingTimer = null;
+  }
+
+  // Ping silencioso — evita que Supabase pause el proyecto
+  Future<void> _ping() async {
+    try {
+      await http.get(
+        Uri.parse('${SupabaseConfig.url}/rest/v1/usuarios?select=id&limit=1'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 5));
+    } catch (_) {}
+  }
+
+  // Actualizar ubicación de un activo en Supabase
+  Future<void> actualizarUbicacionRemota({
+    required String cveActivo,
+    required String nuevaLocalizacion,
+  }) async {
+    if (!inicializado) return;
+    try {
+      await http.patch(
+        Uri.parse(
+          '${SupabaseConfig.url}/rest/v1/registros_inventario'
+          '?sesion_id=eq.$_sesionId'
+          '&cve_activo=eq.$cveActivo',
+        ),
+        headers: _headers,
+        body: jsonEncode({'localizacion': nuevaLocalizacion}),
+      ).timeout(const Duration(seconds: 8));
+    } catch (_) {
+      // Si falla, se actualizará en la próxima sync general
+    }
+  }
 
   // ── Verificar vínculo existente ───────────────────────────────
 
