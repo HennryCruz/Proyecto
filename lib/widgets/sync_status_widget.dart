@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../config/supabase_config.dart';
 import '../services/sync_service.dart';
 
 // ── Widget de estado de sincronización ───────────────────────
