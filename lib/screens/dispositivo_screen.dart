@@ -196,10 +196,20 @@ class _DispositivoScreenState extends State<DispositivoScreen> {
                 const CircularProgressIndicator()
               else
                 ..._usuarios.map((u) {
-                  final seleccionado = u['id'] == _usuarioSeleccionadoId;
+                  // Usar nombre como clave de selección cuando el id
+                  // está vacío (modo offline sin conexión a Supabase)
+                  final clave = u['id']!.isNotEmpty
+                      ? u['id']! : u['nombre']!;
+                  final claveSelec = _usuarioSeleccionadoId != null &&
+                      _usuarioSeleccionadoId!.isNotEmpty
+                      ? _usuarioSeleccionadoId!
+                      : _usuarioSeleccionadoNombre ?? '';
+                  final seleccionado = clave == claveSelec;
+
                   return GestureDetector(
                     onTap: () => setState(() {
-                      _usuarioSeleccionadoId     = u['id'];
+                      _usuarioSeleccionadoId     = u['id']!.isNotEmpty
+                          ? u['id'] : null;
                       _usuarioSeleccionadoNombre = u['nombre'];
                       _error = null;
                     }),

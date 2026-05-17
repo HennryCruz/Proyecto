@@ -152,7 +152,7 @@ class SyncService {
           '&select=usuario_id,dispositivo_id',
         ),
         headers: _headers,
-      ).timeout(const Duration(seconds: 8));
+      ).timeout(const Duration(seconds: 10));
 
       if (existeResp.statusCode == 200) {
         final lista = List.from(jsonDecode(existeResp.body));
@@ -165,22 +165,24 @@ class SyncService {
                        'Contacta al administrador para cambiar el vínculo.',
             );
           }
-          // Ya vinculado al mismo usuario — ok
+          // Ya vinculado al mismo usuario — guardar ID y continuar
+          _dispositivoId = lista.first['dispositivo_id']?.toString();
           return const ResultadoVinculo(exito: true, mensaje: 'OK');
         }
       }
 
-      // 2. Crear o reutilizar dispositivo
-      await _obtenerOCrearDispositivoConHash(deviceHash, usuarioNombre);
-
-      if (_dispositivoId == null) {
+      // 2. Crear dispositivo nuevo y esperar el ID confirmado
+      final nuevoId = await _crearDispositivo(usuarioNombre);
+      if (nuevoId == null || nuevoId.isEmpty) {
         return const ResultadoVinculo(
           exito:   false,
-          mensaje: 'Error al registrar dispositivo. Verifica la conexión.',
+          mensaje: 'No se pudo registrar el dispositivo. '
+                   'Verifica la conexión a internet e intenta de nuevo.',
         );
       }
+      _dispositivoId = nuevoId;
 
-      // 3. Crear vínculo
+      // 3. Crear vínculo con el ID confirmado
       final vinculo = await http.post(
         Uri.parse('${SupabaseConfig.url}/rest/v1/vinculos_dispositivo'),
         headers: {..._headers, 'Prefer': 'return=minimal'},
@@ -189,7 +191,7 @@ class SyncService {
           'usuario_id':     usuarioId,
           'device_hash':    deviceHash,
         }),
-      ).timeout(const Duration(seconds: 8));
+      ).timeout(const Duration(seconds: 10));
 
       if (vinculo.statusCode == 201 || vinculo.statusCode == 200) {
         return const ResultadoVinculo(exito: true, mensaje: 'OK');
@@ -197,14 +199,35 @@ class SyncService {
 
       return ResultadoVinculo(
         exito:   false,
-        mensaje: 'Error al crear vínculo (${vinculo.statusCode})',
+        mensaje: 'Error al crear vínculo (${vinculo.statusCode}). '
+                 'Intenta de nuevo.',
       );
     } catch (e) {
       return ResultadoVinculo(
         exito:   false,
-        mensaje: 'Sin conexión — intenta de nuevo',
+        mensaje: 'Error de conexión. Verifica tu WiFi e intenta de nuevo.',
       );
     }
+  }
+
+  // Crear dispositivo y retornar el ID confirmado
+  Future<String?> _crearDispositivo(String usuarioNombre) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('${SupabaseConfig.url}/rest/v1/dispositivos'),
+        headers: {..._headers, 'Prefer': 'return=representation'},
+        body: jsonEncode({
+          'nombre':  'Dispositivo — $usuarioNombre',
+          'activo':  true,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      if (resp.statusCode == 201) {
+        final data = List.from(jsonDecode(resp.body));
+        if (data.isNotEmpty) return data.first['id']?.toString();
+      }
+    } catch (_) {}
+    return null;
   }
 
   // ── Enviar registro ───────────────────────────────────────────
