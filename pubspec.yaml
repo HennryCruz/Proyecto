@@ -25,7 +25,7 @@ dependencies:
   # Sync y seguridad
   http: ^1.2.0
   shared_preferences: ^2.2.3
-  device_info_plus: ^10.1.0
+  device_info_plus: ^9.1.2
   crypto: ^3.0.3
 
 dev_dependencies:
