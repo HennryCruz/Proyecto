@@ -414,7 +414,7 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
               return Padding(
                 padding: const EdgeInsets.only(top: 5),
                 child: Row(children: [
-                  Icon(Icons.history_location_outlined,
+                  Icon(Icons.place_outlined,
                       size: 13,
                       color: distinta
                           ? Colors.orange.shade700

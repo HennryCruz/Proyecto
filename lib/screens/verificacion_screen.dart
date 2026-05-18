@@ -443,7 +443,7 @@ class _VerificacionScreenState extends State<VerificacionScreen>
               return Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Row(children: [
-                  Icon(Icons.history_location_outlined,
+                  Icon(Icons.place_outlined,
                       size: 14, color: Colors.blue.shade600),
                   const SizedBox(width: 4),
                   Text('Última ubicación escaneada: ',
@@ -566,7 +566,7 @@ class _VerificacionScreenState extends State<VerificacionScreen>
             return Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Row(children: [
-                Icon(Icons.history_location_outlined,
+                Icon(Icons.place_outlined,
                     size: 13, color: accent.withOpacity(0.8)),
                 const SizedBox(width: 4),
                 Text('Escaneado en: ',
