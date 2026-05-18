@@ -367,6 +367,26 @@ class _VerificacionScreenState extends State<VerificacionScreen>
     );
   }
 
+  // ── Última ubicación registrada de un activo ─────────────────
+  // Busca en los registros escaneados la ubicación más reciente
+  String? _ultimaUbicacion(String codigoNuevo, String codigoAnterior) {
+    RegistroInventario? ultimo;
+    for (final r in widget.registros) {
+      final activo = _teorico.buscarPorCodigo(r.cveActivo);
+      final mismoActivo = activo != null &&
+          (activo.codigoNuevo == codigoNuevo ||
+           (codigoAnterior.isNotEmpty &&
+            activo.codigoAnterior == codigoAnterior));
+      if (mismoActivo) {
+        if (ultimo == null || r.fecha.isAfter(ultimo.fecha)) {
+          ultimo = r;
+        }
+      }
+    }
+    return ultimo?.localizacion;
+  }
+
+  // ── Card de faltante ──────────────────────────────────────────
   Widget _cardFaltante(ActivoTeorico a) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -416,6 +436,26 @@ class _VerificacionScreenState extends State<VerificacionScreen>
               if (a.nombre.isNotEmpty)    _chip('Resp.',    a.nombre),
               if (a.resguardo.isNotEmpty) _chip('Resguardo', a.resguardo),
             ]),
+            // Última ubicación registrada
+            Builder(builder: (_) {
+              final ult = _ultimaUbicacion(a.codigoNuevo, a.codigoAnterior);
+              if (ult == null) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Row(children: [
+                  Icon(Icons.history_location_outlined,
+                      size: 14, color: Colors.blue.shade600),
+                  const SizedBox(width: 4),
+                  Text('Última ubicación escaneada: ',
+                      style: TextStyle(fontSize: 11,
+                          color: Colors.blue.shade600)),
+                  Text(ult,
+                      style: TextStyle(fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade700)),
+                ]),
+              );
+            }),
           ])),
           const SizedBox(width: 8),
           GestureDetector(
@@ -519,6 +559,26 @@ class _VerificacionScreenState extends State<VerificacionScreen>
             if (a.nombre.isNotEmpty)    _chip('Resp.',    a.nombre),
             if (a.resguardo.isNotEmpty) _chip('Resguardo', a.resguardo),
           ]),
+          // Última ubicación registrada
+          Builder(builder: (_) {
+            final ult = _ultimaUbicacion(a.codigoNuevo, a.codigoAnterior);
+            if (ult == null) return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Row(children: [
+                Icon(Icons.history_location_outlined,
+                    size: 13, color: accent.withOpacity(0.8)),
+                const SizedBox(width: 4),
+                Text('Escaneado en: ',
+                    style: TextStyle(fontSize: 11,
+                        color: accent.withOpacity(0.7))),
+                Text(ult,
+                    style: TextStyle(fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: accent)),
+              ]),
+            );
+          }),
         ]),
       ),
     );

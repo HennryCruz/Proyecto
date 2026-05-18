@@ -84,6 +84,24 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
   String _codigoPrincipal(ActivoTeorico a) =>
       a.codigoAnterior.isNotEmpty ? a.codigoAnterior : a.codigoNuevo;
 
+  // Última ubicación registrada de un activo en los registros de la sesión
+  String? _ultimaUbicacion(String codigoNuevo, String codigoAnterior) {
+    RegistroInventario? ultimo;
+    for (final r in widget.registros) {
+      final activo = _teorico.buscarPorCodigo(r.cveActivo);
+      final mismoActivo = activo != null &&
+          (activo.codigoNuevo == codigoNuevo ||
+           (codigoAnterior.isNotEmpty &&
+            activo.codigoAnterior == codigoAnterior));
+      if (mismoActivo) {
+        if (ultimo == null || r.fecha.isAfter(ultimo.fecha)) {
+          ultimo = r;
+        }
+      }
+    }
+    return ultimo?.localizacion;
+  }
+
   String _codigoSecundario(ActivoTeorico a) =>
       a.codigoAnterior.isNotEmpty ? a.codigoNuevo : '';
 
@@ -382,12 +400,44 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
             const SizedBox(height: 6),
             Wrap(spacing: 6, runSpacing: 4, children: [
               if (a.localizacion.isNotEmpty)
-                _chip('Ubicación', '${a.localizacion} — ${a.ubicaDesc}'),
+                _chip('Ubic. teórica', '${a.localizacion} — ${a.ubicaDesc}'),
               if (a.marca.isNotEmpty)     _chip('Marca',   a.marca),
               if (a.modelo.isNotEmpty)    _chip('Modelo',  a.modelo),
               if (a.noSerie.isNotEmpty)   _chip('Serie',   a.noSerie),
               if (a.resguardo.isNotEmpty) _chip('Resguardo', a.resguardo),
             ]),
+            // Última ubicación escaneada (puede diferir de la teórica)
+            Builder(builder: (_) {
+              final ult = _ultimaUbicacion(a.codigoNuevo, a.codigoAnterior);
+              if (ult == null) return const SizedBox.shrink();
+              final distinta = ult != a.localizacion;
+              return Padding(
+                padding: const EdgeInsets.only(top: 5),
+                child: Row(children: [
+                  Icon(Icons.history_location_outlined,
+                      size: 13,
+                      color: distinta
+                          ? Colors.orange.shade700
+                          : Colors.green.shade600),
+                  const SizedBox(width: 4),
+                  Text('Última vez escaneado en: ',
+                      style: TextStyle(fontSize: 11,
+                          color: Colors.grey.shade600)),
+                  Text(ult,
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: distinta
+                              ? Colors.orange.shade700
+                              : Colors.green.shade600)),
+                  if (distinta) ...[
+                    const SizedBox(width: 4),
+                    Icon(Icons.warning_amber_outlined,
+                        size: 12, color: Colors.orange.shade600),
+                  ],
+                ]),
+              );
+            }),
           ])),
           // Botón escanear (solo para pendientes)
           if (!escaneado) ...[

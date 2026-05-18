@@ -1244,9 +1244,11 @@ class _InventarioScreenState extends State<InventarioScreen> {
       // Pinch-to-zoom + tap para enfocar
       GestureDetector(
         onScaleUpdate: (details) {
-          final nuevoZoom = (_nivelZoom * details.scale).clamp(1.0, 4.0);
+          // Interpolación suave: evitar saltos bruscos
+          // details.scale viene desde 0 — lo normalizamos para que sea gradual
+          final delta    = (details.scale - 1.0) * 0.5; // Reducir sensibilidad
+          final nuevoZoom = (_nivelZoom + delta).clamp(1.0, 4.0);
           if (nuevoZoom <= 1.05) {
-            // Cerca de 1x — usar resetZoomScale para evitar ultra-wide
             _scannerCtrl?.resetZoomScale();
             setState(() => _nivelZoom = 1.0);
           } else {
@@ -1338,7 +1340,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
               // Zoom -
               GestureDetector(
                 onTap: () {
-                  final z = (_nivelZoom - 0.5).clamp(1.0, 4.0);
+                  final z = (_nivelZoom - 0.25).clamp(1.0, 4.0);
                   if (z <= 1.0) {
                     _scannerCtrl?.resetZoomScale();
                   } else {
@@ -1370,7 +1372,7 @@ class _InventarioScreenState extends State<InventarioScreen> {
               // Zoom +
               GestureDetector(
                 onTap: () {
-                  final z = (_nivelZoom + 0.5).clamp(1.0, 4.0);
+                  final z = (_nivelZoom + 0.25).clamp(1.0, 4.0);
                   _scannerCtrl?.setZoomScale(z);
                   setState(() => _nivelZoom = z);
                 },
